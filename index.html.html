@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>翰學指揮部 V22.4 (戰情精簡版)</title>
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* === 全域與佈局設定 === */
+        * { box-sizing: border-box; }
+        html, body { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            font-family: "Segoe UI", "Microsoft JhengHei", sans-serif; 
+            background: #f4f6f9; overflow: hidden; 
+        }
+
+        :root { 
+            --math-color: #4361ee; --math-bg: #ebf0ff;
+            --nature-color: #00b894; --nature-bg: #e6fffa;
+            --dark: #2d3436; --success: #10b981; --danger: #ef4444; --warn: #f59e0b;
+            --sidebar-w: 260px;
+            --topbar-h: 55px;
+        }
+
+        .app-container { display: flex; width: 100%; height: 100vh; }
+
+        /* 左側選單 */
+        .sidebar { 
+            width: var(--sidebar-w); min-width: var(--sidebar-w);
+            background: #fff; border-right: 1px solid #e5e7eb;
+            display: flex; flex-direction: column; height: 100%;
+        }
+        .sidebar-header { padding: 15px; background: var(--dark); color: white; flex-shrink: 0; }
+        .filter-area { padding: 10px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
+        .search-box { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px; }
+        .student-list { flex: 1; overflow-y: auto; padding: 10px; }
+        .student-card { padding: 10px; margin-bottom: 5px; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; transition:0.2s; align-items: center;}
+        .student-card:hover { background: #eff6ff; border-color: var(--math-color); }
+        .student-card.active { background: var(--dark); color: white; transform: scale(1.02); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .stu-status-icon { font-size: 0.8rem; margin-left: 5px; }
+
+        /* 主舞台 */
+        .main-stage { 
+            flex: 1; display: flex; flex-direction: column; 
+            height: 100%; position: relative; overflow: hidden; 
+        }
+
+        .top-bar { 
+            height: var(--topbar-h); background: #fff; border-bottom: 1px solid #e2e8f0; 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 0 20px; flex-shrink: 0; z-index: 100;
+        }
+
+        .nav-tools { display: flex; gap: 4px; }
+
+        .sys-btn { 
+            padding: 5px 8px; 
+            border: 1px solid #cbd5e1; 
+            border-radius: 4px; 
+            background: #fff; 
+            cursor: pointer; 
+            font-weight: bold; 
+            color: var(--dark); 
+            display: flex; 
+            align-items: center; 
+            gap: 4px; 
+            text-decoration: none; 
+            font-size: 0.8rem; 
+            transition:0.2s; 
+            white-space: nowrap; 
+        }
+        .sys-btn:hover { background: #f1f5f9; color: var(--math-color); }
+        .btn-alert { color: var(--danger); border-color: #fca5a5; background: #fef2f2; }
+        .btn-mission { color: #6c5ce7; border-color: #a29bfe; background: #f3e8ff; }
+        .btn-mission:hover { background: #6c5ce7; color: white; }
+        .btn-activity { color: #d35400; border-color: #e67e22; background: #fff3e0; }
+        .btn-footprint { color: #059669; border-color: #6ee7b7; background: #ecfdf5; }
+        .btn-exam { color: #2980b9; border-color: #7fb3d5; background: #eaf2f8; } 
+        
+        .btn-scroll-active { background: #e74c3c !important; color: white !important; border-color: #c0392b !important; box-shadow: inset 0 2px 5px rgba(0,0,0,0.2); }
+
+        /* === 戰力儀表板 === */
+        .split-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+        .top-panel { flex: 1; overflow-y: auto; padding: 20px; border-bottom: 5px solid #dfe6e9; background: #f4f6f9; min-height: 40%; }
+        .bottom-panel { height: 40%; min-height: 250px; background: white; display: flex; flex-direction: column; box-shadow: 0 -5px 15px rgba(0,0,0,0.05); z-index: 10; transition: height 0.3s; }
+        .bottom-panel.collapsed { height: 40px; }
+        .panel-header { padding: 10px 20px; background: #2d3436; color: white; font-weight: bold; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .radar-content { flex: 1; overflow-y: auto; padding: 15px; background: #fff; }
+
+        /* 卡片與細節 */
+        .student-header { 
+            margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+        }
+        .week-activity-box { display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 8px 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
+        .wa-title { font-size: 0.8rem; color: #64748b; font-weight: bold; margin-right: 5px; }
+        .wa-days { display: flex; gap: 5px; }
+        .wa-day { display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: help; }
+        .wa-dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; transition:0.2s; }
+        .wa-date { font-size: 0.65rem; color: #94a3b8; }
+        .wa-active { background: #d1fae5; color: #065f46; border: 1px solid #34d399; }
+        .wa-inactive { background: #fff; color: #cbd5e1; border: 1px dashed #cbd5e1; }
+        .wa-day:hover .wa-dot { transform: scale(1.15); }
+
+        .topic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; padding-bottom: 20px; }
+        .topic-card { background: white; border-radius: 8px; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; position: relative; transition: all 0.2s; cursor: pointer; }
+        .topic-card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); border-color: var(--math-color); }
+        .topic-card.selected { border: 2px solid var(--math-color); background: #f0f9ff; transform: scale(1.02); }
+
+        .tc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+        .tc-title { font-weight: bold; color: #2d3436; font-size: 1.05rem; }
+        .tc-sub-badge { font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; color: white; margin-right: 5px; }
+        .bg-math { background: var(--math-color); } .bg-nature { background: var(--nature-color); }
+        .bg-level-a { background: #e74c3c; } .bg-level-b { background: #f39c12; } .bg-level-c { background: #27ae60; }
+
+        .tc-stat-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px solid #f1f2f6; }
+        .trend-box { display: flex; align-items: center; gap: 8px; font-weight: bold; font-size: 0.95rem; }
+        .trend-up { color: var(--success); } .trend-down { color: var(--danger); }
+        .trend-flat { color: var(--warn); } .trend-new { color: #0984e3; } .trend-old { color: #b2bec3; }
+        .score-display { font-size: 1.2rem; font-weight: 800; }
+        .score-good { color: var(--success); } .score-bad { color: var(--danger); } .score-mid { color: var(--warn); }
+
+        /* 日誌與表格 */
+        .log-table { width: 100%; border-collapse: collapse; }
+        .log-table th { background: #e67e22; color: white; padding: 10px; text-align: left; }
+        .log-table td { padding: 12px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
+        .log-table tr:hover { background: #fff8e1; }
+        .log-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 0.85rem; margin-bottom: 4px; margin-right: 4px; }
+        .lb-math { background: #ebf0ff; color: #4361ee; border: 1px solid #b9cbfb; }
+        .lb-nature { background: #e6fffa; color: #00b894; border: 1px solid #a3e4d7; }
+        .lb-count { font-weight: bold; margin-left: 5px; }
+        
+        .radar-table { width: 100%; border-collapse: collapse; }
+        .radar-table th { position: sticky; top: 0; background: #f1f2f6; padding: 10px; text-align: left; color: #636e72; z-index: 5; }
+        .radar-table td { padding: 10px; border-bottom: 1px solid #eee; vertical-align: middle; white-space: normal; }
+        .radar-table tr:hover { background: #f8f9fa; cursor: pointer; }
+        .radar-row-alert { background: #fff0f0; } 
+        .radar-row-alert:hover { background: #ffebeb; }
+
+        /* 滑出欄 */
+        .record-column { width: 0; background: #fff; border-left: 1px solid #e5e7eb; display: flex; flex-direction: column; transition: width 0.3s; position: absolute; right: 0; top: var(--topbar-h); height: calc(100% - var(--topbar-h)); z-index: 90; box-shadow: -5px 0 15px rgba(0,0,0,0.1); }
+        .record-column.open { width: 450px; }
+        .toggle-btn { position: absolute; top: 50%; right: 0; width: 25px; height: 50px; background: var(--dark); color: white; border-radius: 8px 0 0 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 95; transition: right 0.3s; display: none; }
+        .toggle-btn.open { right: 450px; display: flex; }
+
+        /* Modal & Helpers */
+        .loading-mask { position: fixed; inset: 0; background: rgba(255,255,255,0.95); z-index: 2000; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .modal { display: none; position: fixed; z-index: 3000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); align-items: center; justify-content: center; backdrop-filter: blur(3px); }
+        #videoModal { z-index: 3100 !important; }
+        .modal-content { background-color: black; margin: auto; padding: 0; width: 90%; max-width: 900px; aspect-ratio: 16/9; position: relative; border-radius: 8px; }
+        .close-modal { position: absolute; top: -40px; right: 0; color: white; font-size: 35px; cursor: pointer; font-weight:bold; text-shadow: 0 2px 5px black; }
+        
+        /* 錯題按鈕樣式 */
+        .err-btn { 
+            display: inline-flex; align-items: center; gap: 4px; 
+            background: #fff; color: #c0392b; border: 1px solid #fab1a0; 
+            padding: 3px 8px; border-radius: 4px; font-size: 0.9rem; 
+            font-weight: bold; cursor: pointer; text-decoration: none; 
+            margin: 2px; transition: 0.2s; font-family: Consolas, monospace;
+        }
+        .err-btn:hover { background: #c0392b; color: white; border-color: #c0392b; }
+        
+        .resolve-btn { padding: 4px 10px; border: 1px solid #b2bec3; background: #fff; border-radius: 4px; cursor: pointer; transition: 0.2s; font-size: 0.85rem; color: #2d3436; margin-right: 5px; }
+        .resolve-btn:hover { background: #dfe6e9; color: #000; border-color: #636e72; }
+
+        /* 任務派送 */
+        .mission-modal-box { background: white; width: 650px; max-width: 90%; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); display: flex; flex-direction: column; max-height: 90vh; }
+        .mission-header { background: linear-gradient(135deg, #6c5ce7, #a29bfe); color: white; padding: 15px 20px; font-weight: bold; font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .mission-body { padding: 20px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; flex: 1; }
+        .mission-panel { border: 1px solid #eee; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); flex-shrink: 0; }
+        .panel-head { padding: 10px 15px; color: white; font-weight: bold; font-size: 1rem; }
+        .panel-content { padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .math-theme .panel-head { background: var(--math-color); } .nature-theme .panel-head { background: var(--nature-color); }
+        .select-box { padding: 10px; border: 2px solid #eee; border-radius: 6px; font-size: 1rem; width: 100%; outline: none; }
+        
+        /* 補救追蹤 */
+        .alert-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; padding: 20px; }
+        .alert-card-item { background: #fff5f5; border: 2px solid #ff6b6b; border-radius: 8px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); position: relative; animation: fadeIn 0.3s; display: flex; flex-direction: column; gap: 5px; }
+        .alert-card-item:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(239, 68, 68, 0.15); transition: 0.2s; }
+        .ac-name { font-size: 1.2rem; font-weight: bold; color: #2d3436; border-bottom: 1px dashed #feb2b2; padding-bottom: 5px; margin-bottom: 5px; }
+        .ac-topic { font-size: 1rem; color: #636e72; font-weight: bold; }
+        .ac-score { font-size: 1.5rem; font-weight: 800; color: #c0392b; align-self: flex-end; }
+        .ac-date { font-size: 0.8rem; color: #95a5a6; align-self: flex-end; }
+        .ac-tag { position: absolute; top: 10px; right: 10px; background: #c0392b; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+
+        .launch-btn { 
+            padding: 10px; border: none; border-radius: 6px; font-weight: bold; color: white; 
+            display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 1.05rem; 
+            transition: all 0.2s ease;
+            background: #b2bec3; cursor: not-allowed; opacity: 0.7; filter: grayscale(80%);
+        }
+        .launch-btn.active-btn { cursor: pointer; opacity: 1; filter: grayscale(0%); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .launch-btn.active-btn.btn-math { background: var(--math-color); }
+        .launch-btn.active-btn.btn-nature { background: var(--nature-color); }
+        .launch-btn.active-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.15); filter: brightness(110%); }
+        .launch-btn.active-btn:active { transform: translateY(0); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+        .qr-wrapper { margin-top: 10px; padding: 20px; background: #fff; border: 3px solid #dfe6e9; border-radius: 12px; display: none; flex-direction: column; align-items: center; gap: 15px; animation: fadeIn 0.3s; text-align: center; }
+        .qr-wrapper.active { display: flex; }
+        .qr-img-box { padding: 10px; background: white; border-radius: 8px; border: 1px solid #eee; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .qr-img-box img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+        .qr-info { display: flex; flex-direction: column; gap: 5px; font-size: 1rem; width: 100%; }
+        .qr-link { color: #0984e3; text-decoration: none; font-weight: bold; font-size: 1rem; margin-top: 10px; display: inline-block; padding: 8px 20px; background: #e3f2fd; border-radius: 8px; transition:0.2s; }
+        .code-display { font-size: 2rem; font-weight: 800; letter-spacing: 5px; color: var(--dark); background: #fff; border: 3px dashed var(--warn); padding: 8px 25px; border-radius: 10px; margin-top: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        
+        .loading-txt { font-size: 1rem; color: #666; animation: blink 1s infinite; font-weight: normal; letter-spacing: 1px;}
+        .error-txt { font-size: 0.8rem; font-weight: bold; display: block; margin-top: 5px; }
+
+        @keyframes blink { 50% { opacity: 0.5; } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .raw-table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .raw-table th { position: sticky; top: 0; background: #dfe6e9; color: #2d3436; padding: 12px; text-align: left; font-weight: bold; border-bottom: 2px solid #b2bec3; z-index: 10; }
+        .raw-table td { padding: 10px 12px; border-bottom: 1px solid #f1f2f6; color: #2d3436; vertical-align: top; }
+        .raw-table tr:hover { background-color: #f1f5f9; }
+        .row-danger { background-color: #fff1f1 !important; } .row-perfect { background-color: #f0fff4 !important; }
+        .err-badge { display: inline-block; padding: 4px 8px; margin: 2px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; font-family: Consolas, monospace; background: #ffeaa7; color: #d35400; border: 1px solid #fdcb6e; }
+        .score-tag { padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.9rem; display: inline-block; min-width: 60px; text-align: center; }
+        .score-high { background: #d1fae5; color: #065f46; } .score-mid { background: #ffedd5; color: #9a3412; } .score-low { background: #fee2e2; color: #991b1b; }
+        .j-col-data { font-family: "Courier New", monospace; color: #636e72; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all; }
+        .raw-student-link { color: #2d3436; text-decoration: none; border-bottom: 1px dashed #999; cursor: pointer; transition: 0.2s; }
+        .raw-student-link:hover { color: #0984e3; border-bottom-color: #0984e3; }
+        
+        .raw-date-input { padding: 5px 8px; border: 1px solid #b2bec3; border-radius: 4px; background: #dfe6e9; color: #2d3436; font-weight: bold; cursor: pointer; outline: none; font-family: inherit; }
+
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div id="loading-mask" class="loading-mask">
+        <i class="fas fa-satellite-dish fa-spin" style="font-size: 2rem; color: var(--math-color);"></i>
+        <p style="margin-top: 10px; color: #64748b;">V22.4 戰情精簡版</p>
+        <div id="loading-text" style="font-size: 0.8rem; color: #94a3b8;">正在聯繫資料庫</div>
+    </div>
+
+    <div id="videoModal" class="modal"><div class="modal-content"><span class="close-modal" onclick="closeVideo()">&times;</span><iframe id="videoFrame" width="100%" height="100%" src="" frameborder="0" allowfullscreen></iframe></div></div>
+
+    <div id="missionModal" class="modal" style="background-color: rgba(0,0,0,0.5);">
+        <div class="mission-modal-box">
+            <div class="mission-header"><span><i class="fas fa-rocket"></i> 任務控制台</span><i class="fas fa-times" style="cursor:pointer;" onclick="closeMissionModal()"></i></div>
+            <div class="mission-body">
+                <div style="background:#f1f2f6; padding:10px; border-radius:8px; text-align:center;">
+                    <span style="color:#636e72;">當前目標學生：</span><strong id="mission-target-student" style="font-size:1.1rem; color:#2d3436;">(未選擇)</strong>
+                </div>
+                <div class="mission-panel math-theme">
+                    <div class="panel-head"><span><i class="fas fa-calculator"></i> 數學任務</span></div>
+                    <div class="panel-content">
+                        <select id="math-select" class="select-box" onchange="checkMissionBtn('math')"><option value="">(讀取中...)</option></select>
+                        <button id="btn-math" class="launch-btn btn-math" onclick="generateMission('math')">發送數學任務 <i class="fas fa-paper-plane"></i></button>
+                        <div id="qr-area-math" class="qr-wrapper"><div id="qrcode-math" class="qr-img-box"></div><div class="qr-info"><span style="font-weight:bold; font-size:1.1rem; color:var(--math-color);">數學任務已生成</span><a id="link-math" href="#" target="_blank" class="qr-link">開啟連結 &rarr;</a></div></div>
+                    </div>
+                </div>
+                <div class="mission-panel nature-theme">
+                    <div class="panel-head"><span><i class="fas fa-leaf"></i> 自然任務</span></div>
+                    <div class="panel-content">
+                        <select id="nature-select" class="select-box" onchange="checkMissionBtn('nature')"><option value="">(讀取中...)</option></select>
+                        <button id="btn-nature" class="launch-btn btn-nature" onclick="generateMission('nature')">發送自然任務 <i class="fas fa-paper-plane"></i></button>
+                        <div id="qr-area-nature" class="qr-wrapper"><div id="qrcode-nature" class="qr-img-box"></div><div class="qr-info"><span style="font-weight:bold; font-size:1.1rem; color:var(--nature-color);">自然任務已生成</span><a id="link-nature" href="#" target="_blank" class="qr-link">開啟連結 &rarr;</a></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="alertModal" class="modal" style="background-color: #f4f6f9;">
+        <div class="modal-content" style="width: 95%; max-width: 1200px; height: 90vh; background: #fff; display:flex; flex-direction:column; box-shadow: 0 0 20px rgba(0,0,0,0.1);">
+            <div style="padding: 15px 20px; border-bottom: 2px solid #eee; display:flex; justify-content:space-between; align-items:center; background: #c0392b; color:white;">
+                <div style="font-size: 1.2rem; font-weight: bold;">
+                    <i class="fas fa-exclamation-triangle"></i> 補救追蹤中心
+                    <span style="font-size:0.9rem; font-weight:normal; margin-left:15px; background:rgba(255,255,255,0.2); padding:5px 10px; border-radius:4px;">
+                        顯示 <input type="number" id="alert-modal-threshold" value="60" style="width:50px; text-align:center; font-weight:bold; color:#c0392b; border:none; border-radius:3px;" onchange="renderAlertUI()"> 分以下
+                    </span>
+                </div>
+                <div style="display:flex; align-items:center;">
+                    <button id="btn-auto-scroll" class="sys-btn" onclick="toggleAutoScroll()" style="margin-right:15px; color:#c0392b; font-weight:bold;"><i class="fas fa-play"></i> 自動捲動</button>
+                    <button class="sys-btn" onclick="renderAlertUI()" style="margin-right:15px; color:#c0392b;"><i class="fas fa-sync-alt"></i> 刷新</button>
+                    <i class="fas fa-times" style="font-size: 1.5rem; cursor:pointer;" onclick="closeAlertModal()"></i>
+                </div>
+            </div>
+            <div id="alert-grid-container" style="flex: 1; overflow-y: auto; background: #fff5f5;">
+                <div id="alert-grid" class="alert-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="activityModal" class="modal" style="background-color: #f4f6f9;">
+        <div class="modal-content" style="width: 90%; max-width: 1000px; height: 90vh; background: #fff; display:flex; flex-direction:column; box-shadow: 0 0 20px rgba(0,0,0,0.1);">
+            <div style="padding: 15px 20px; border-bottom: 2px solid #eee; display:flex; justify-content:space-between; align-items:center; background: #d35400; color:white;">
+                <div style="font-size: 1.2rem; font-weight: bold;"><i class="fas fa-calendar-check"></i> 練功日誌 (Diligence Log)</div>
+                <div style="display:flex; align-items:center;">
+                    <input type="date" id="activity-date-picker" class="raw-date-input" onchange="renderActivityLog()" style="margin-right:10px; background:white;">
+                    <button class="sys-btn" onclick="renderActivityLog()" style="margin-right:15px; color:#d35400;"><i class="fas fa-sync-alt"></i> 刷新</button>
+                    <i class="fas fa-times" style="font-size: 1.5rem; cursor:pointer;" onclick="closeActivityModal()"></i>
+                </div>
+            </div>
+            <div style="flex: 1; overflow: auto; padding: 20px; background: #fff;">
+                <div id="activity-empty-msg" style="text-align:center; padding:40px; color:#aaa; display:none;">
+                    <i class="fas fa-bed" style="font-size:3rem; margin-bottom:15px;"></i><br>該日無任何練功記錄
+                </div>
+                <table class="log-table" id="activity-table">
+                    <thead><tr><th width="120">學生</th><th width="100">總題數</th><th width="150">時間分佈</th><th>練習內容 (單元 : 題數)</th></tr></thead>
+                    <tbody id="activity-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="examModal" class="modal" style="background-color: #f4f6f9;">
+        <div class="modal-content" style="width: 95%; max-width: 1200px; height: 90vh; background: #fff; display:flex; flex-direction:column; box-shadow: 0 0 20px rgba(0,0,0,0.1);">
+            <div style="padding: 15px 20px; border-bottom: 2px solid #eee; display:flex; justify-content:space-between; align-items:center; background: #2980b9; color:white;">
+                <div style="font-size: 1.2rem; font-weight: bold;"><i class="fas fa-file-signature"></i> 試卷戰情室</div>
+                <div style="display:flex; align-items:center;">
+                    <label style="font-size:0.9rem; margin-right:15px; display:flex; align-items:center; cursor:pointer; background:rgba(255,255,255,0.2); padding:3px 8px; border-radius:4px;">
+                        <input type="checkbox" id="show-active-only" checked onchange="populateExamSelect()" style="margin-right:5px; cursor:pointer;"> 只顯示開啟中
+                    </label>
+
+                    <span style="font-size:0.9rem; margin-right:10px;">選擇試卷：</span>
+                    <select id="exam-selector" class="raw-date-input" style="background:white; border:none; min-width:250px; margin-right:15px;" onchange="renderExamReport()">
+                        <option value="">(讀取中...)</option>
+                    </select>
+                    <button class="sys-btn" onclick="renderExamReport()" style="margin-right:15px; color:#2980b9;"><i class="fas fa-sync-alt"></i> 刷新</button>
+                    <i class="fas fa-times" style="font-size: 1.5rem; cursor:pointer;" onclick="closeExamModal()"></i>
+                </div>
+            </div>
+            
+            <div style="padding: 15px; background:#ecf0f1; border-bottom:1px solid #bdc3c7; display:flex; gap:20px; font-weight:bold; color:#2c3e50;">
+                <div style="background:white; padding:5px 15px; border-radius:5px;"><i class="fas fa-users"></i> 應考人數：<span id="exam-stat-count" style="color:#2980b9;">0</span></div>
+                <div style="background:white; padding:5px 15px; border-radius:5px;"><i class="fas fa-chart-line"></i> 平均分數：<span id="exam-stat-avg" style="color:#e67e22;">0</span></div>
+            </div>
+
+            <div style="flex: 1; overflow: auto; padding: 0; background: #f8fafc;">
+                <table class="raw-table">
+                    <thead>
+                        <tr>
+                            <th width="60">排名</th>
+                            <th width="120">學生</th>
+                            <th width="80">分數</th>
+                            <th width="100">題數 (對/總)</th>
+                            <th width="120">交卷時間</th>
+                            <th>錯題分佈</th>
+                        </tr>
+                    </thead>
+                    <tbody id="exam-table-body">
+                        <tr><td colspan="6" style="text-align:center; padding:50px; color:#95a5a6;">請先選擇一份試卷</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="rawDataModal" class="modal" style="background-color: #f4f6f9;">
+        <div class="modal-content" style="width: 95%; max-width: 1200px; height: 90vh; background: #fff; display:flex; flex-direction:column; box-shadow: 0 0 20px rgba(0,0,0,0.1);">
+            <div style="padding: 15px 20px; border-bottom: 2px solid #eee; display:flex; justify-content:space-between; align-items:center; background: #2d3436; color:white;">
+                <div style="font-size: 1.2rem; font-weight: bold;"><i class="fas fa-database"></i> <span id="raw-title-date"></span> 原始數據監控 <span id="raw-data-count" style="font-size:0.9rem; background:#e17055; padding:2px 8px; border-radius:10px; margin-left:10px;">0 筆</span></div>
+                <div style="display:flex; align-items:center;">
+                    <input type="date" id="raw-date-picker" class="raw-date-input" onchange="refreshRawData()" style="margin-right:10px;">
+                    <button id="raw-reset-btn" onclick="resetRawFilter()" style="display:none; margin-right:10px; background:#636e72; border:none; color:white; padding:5px 15px; border-radius:4px; cursor:pointer; transition:0.3s;"><i class="fas fa-undo"></i> 顯示全部</button>
+                    <button id="raw-refresh-btn" onclick="refreshRawData()" style="margin-right:15px; background:#0984e3; border:none; color:white; padding:5px 15px; border-radius:4px; cursor:pointer; transition:0.3s;"><i class="fas fa-sync-alt"></i> 立即刷新</button>
+                    <i class="fas fa-times" style="font-size: 1.5rem; cursor:pointer;" onclick="closeRawDataModal()"></i>
+                </div>
+            </div>
+            <div style="flex: 1; overflow: auto; padding: 20px; background: #f8fafc;">
+                <table class="raw-table"><thead><tr><th width="80">時間</th><th width="100">學生</th><th width="60">科目</th><th width="150">單元名稱</th><th width="100">成績/狀態</th><th>錯題解析 (題號 : 誤答)</th><th width="150">足跡/試卷ID (J欄)</th></tr></thead><tbody id="raw-table-body"></tbody></table>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar">
+        <div class="sidebar-header"><h2 style="margin:0;"><i class="fas fa-shield-alt"></i> 翰學指揮部 <span style="font-size:0.7em; opacity:0.8;">V22.4</span></h2></div>
+        <div class="filter-area">
+            <input type="text" class="search-box" placeholder="🔍 搜尋學生..." onkeyup="filterList(this.value)">
+        </div>
+        <div class="student-list" id="student-list"></div>
+    </div>
+
+    <div class="main-stage">
+        <div class="top-bar">
+            <div style="font-weight:bold; color:var(--dark);"><i class="fas fa-chart-line" style="color:var(--math-color);"></i> 戰力監控中心 <span id="update-time" style="font-size:0.8rem; color:#94a3b8; margin-left:10px;"></span></div>
+            <div class="nav-tools">
+                <a href="https://yaohangdayday.synology.me/wesong/" target="_blank" class="sys-btn" style="color:#fff; background:#2d3436; border:1px solid #2d3436;">
+                    <i class="fas fa-globe"></i> WeSong 平台
+                </a>
+                <a href="javascript:void(0)" onclick="openActivityModal()" class="sys-btn btn-activity"><i class="fas fa-calendar-alt"></i> 練功日誌</a>
+                <a href="javascript:void(0)" onclick="openExamModal()" class="sys-btn btn-exam"><i class="fas fa-file-signature"></i> 試卷分析</a> 
+                <a href="javascript:void(0)" onclick="openMissionModal()" class="sys-btn btn-mission"><i class="fas fa-rocket"></i> 派送任務</a>
+                <a href="javascript:void(0)" onclick="openAlertModal()" class="sys-btn" style="color:#c0392b; border-color:#e74c3c; background:#fff5f5;"><i class="fas fa-chart-bar"></i> 📉 補救追蹤</a>
+                <a href="learning_footprints.html" target="_blank" class="sys-btn btn-footprint"><i class="fas fa-map-marked-alt"></i> 學習足跡</a>
+                <a href="javascript:void(0)" onclick="openRawDataModal()" class="sys-btn" style="color:#d35400; border-color:#e67e22; background:#fff3e0;"><i class="fas fa-list-ul"></i> 原始數據表</a>
+                <a href="https://yaohangdayday.synology.me/%E7%BF%B0%E5%AD%B8%E6%95%99%E8%82%B2%E7%B3%BB%E7%B5%B1-%E5%BE%8C%E5%8B%A4%E4%B8%AD%E5%BF%83/error_book_generator" target="_blank" class="sys-btn btn-alert"><i class="fas fa-book-dead"></i> 錯題消滅</a>
+                <button class="sys-btn" onclick="forceReload()"><i class="fas fa-sync-alt"></i> 刷新</button>
+            </div>
+        </div>
+
+        <div class="split-view">
+            <div class="top-panel" id="combat-view">
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#94a3b8; font-size:1.2rem;">
+                    <i class="fas fa-user-astronaut" style="font-size:4rem; color:#dfe6e9; margin-bottom:20px;"></i>
+                    <p>請從左側名單選擇一位學生<br>開始分析單元戰力</p>
+                </div>
+            </div>
+
+            <div class="bottom-panel" id="topic-radar-panel">
+                <div class="panel-header" onclick="toggleRadarPanel()">
+                    <span><i class="fas fa-globe-asia"></i> 全域戰情 (單元交叉分析) - <span id="radar-topic-title">未選擇</span></span>
+                    <i class="fas fa-chevron-down" id="radar-toggle-icon"></i>
+                </div>
+                <div class="radar-content" id="radar-content">
+                    <div style="text-align:center; padding:30px; color:#b2bec3;">
+                        <i class="fas fa-crosshairs" style="font-size:3rem; margin-bottom:10px;"></i>
+                        <p>點擊上方任一單元卡片，在此顯示全班戰力分析</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="toggle-data-btn" class="toggle-btn" onclick="toggleRecordColumn()"><i class="fas fa-chevron-left"></i></div>
+        <div class="record-column" id="col-record">
+            <div style="padding:15px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; background:#f8fafc;">
+                <b id="detail-title">歷史明細</b>
+                <i class="fas fa-times" style="cursor:pointer" onclick="toggleRecordColumn()"></i>
+            </div>
+            <div id="detail-content" style="flex:1; overflow-y:auto; padding:15px;"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbwIAFuGcdKuwYjztmWQrqm8Qprlew96qYSriR6pWa-Uc_e4U8O99ki4Au6FvE2owbpD/exec";
+    const QUESTION_DB_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSMFALOGjb1gGEzCeyjtpPe-U4V0JQ2g-6-L1DJ0ptjsr-7aay68yzMqZGMnFMaD6r8yJcDA40oEShf/pub?gid=2113455428&single=true&output=csv";
+    
+    const DATA_SOURCE_MATH = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR95YiWV-IcQ80_369MccfAROg6mu-kwJjy9v3X92Lb8vKORpw_9wmPJj1-Xeii14iChPznFEaO5OU6/pub?gid=423591624&single=true&output=csv';
+    const DATA_SOURCE_NATURE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR95YiWV-IcQ80_369MccfAROg6mu-kwJjy9v3X92Lb8vKORpw_9wmPJj1-Xeii14iChPznFEaO5OU6/pub?gid=685359916&single=true&output=csv';
+    const DATA_SOURCE_NEW_EXAM_RECORDS = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSMFALOGjb1gGEzCeyjtpPe-U4V0JQ2g-6-L1DJ0ptjsr-7aay68yzMqZGMnFMaD6r8yJcDA40oEShf/pub?gid=1183780317&single=true&output=csv';
+    const DATA_SOURCE_EXAM = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSMFALOGjb1gGEzCeyjtpPe-U4V0JQ2g-6-L1DJ0ptjsr-7aay68yzMqZGMnFMaD6r8yJcDA40oEShf/pub?gid=277156605&single=true&output=csv';
+
+    let rawMathRecords = [], rawNatureRecords = []; 
+    let aggregatedData = {}; 
+    let videoMap = {};
+    let autoDiscoveredStudents = new Map();
+    let dbMathTopics = new Set(), dbNatureTopics = new Set();
+    let dbStudentsDetail = []; 
+    let examList = [];
+    let currentSelectedStudent = null;
+    let currentRadarTopic = null; 
+    const DB_COL = { ID: 4, VID: 7 }; 
+    let latestRawRecords = [];
+    let rawDataFilterName = null; 
+    let todayActivityMap = new Map(); 
+    
+    let scrollTimer = null;
+    let isScrolling = false;
+
+    window.onload = async function() {
+        const d = new Date();
+        const yyyy = d.getFullYear(), mm = String(d.getMonth() + 1).padStart(2, '0'), dd = String(d.getDate()).padStart(2, '0');
+        const todayStr = `${yyyy}-${mm}-${dd}`;
+        document.getElementById('raw-date-picker').value = todayStr;
+        document.getElementById('activity-date-picker').value = todayStr;
+        await initSystem();
+        setInterval(updateData, 60000);
+    };
+
+    async function initSystem() {
+        try {
+            document.getElementById('loading-text').innerText = "讀取學生名冊...";
+            await fetchStudentsCSV();
+            document.getElementById('loading-text').innerText = "載入題庫與試卷...";
+            await loadQuestionDB();
+            await fetchExams(); 
+            await updateData();
+        } catch(e) { 
+            console.error(e); 
+            alert("啟動部分失敗: " + e.message); 
+        } finally {
+            document.getElementById('loading-mask').style.display = 'none';
+        }
+    }
+
+    async function forceReload() {
+        document.getElementById('update-time').innerHTML = '<i class="fas fa-spinner fa-spin"></i> 同步中...';
+        await fetchExams(); 
+        await updateData();
+    }
+
+    async function refreshRawData() {
+        const btn = document.getElementById('raw-refresh-btn');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; btn.disabled = true;
+        try { await updateData(); renderRawTable(); } catch (e) { } 
+        finally { btn.innerHTML = '<i class="fas fa-sync-alt"></i> 立即刷新'; btn.disabled = false; }
+    }
+
+    function fetchStudentsCSV() { 
+        return new Promise((res) => { 
+            Papa.parse('students.csv?t='+Date.now(), { 
+                download: true, header: true, skipEmptyLines: true, 
+                complete: (r) => { 
+                    dbStudentsDetail = r.data.map(row => ({ name: (row['顯示名稱']||row['姓名']||'').trim(), id: (row['帳號']||row['ID']||'').trim(), pwd: (row['密碼']||row['Password']||'').trim() })).filter(s => s.name && s.id); 
+                    res(); 
+                }, 
+                error: (err) => { 
+                    console.warn("找不到學生名冊 csv，改為自動探索模式", err); 
+                    res(); 
+                } 
+            }); 
+        }); 
+    }
+
+    function loadQuestionDB() {
+        return new Promise(resolve => {
+            Papa.parse(QUESTION_DB_URL, {
+                download: true, header: false, skipEmptyLines: true,
+                complete: res => {
+                    if(res.data && res.data.length > 1) {
+                        res.data.slice(1).forEach(row => { if(row[DB_COL.ID] && row[DB_COL.VID]) videoMap[row[DB_COL.ID].trim()] = row[DB_COL.VID].trim(); });
+                    }
+                    resolve();
+                }, error: resolve
+            });
+        });
+    }
+
+    // 🔴 關鍵修正：讀取 Status 欄位 (index 4)
+    function fetchExams() {
+        return new Promise(resolve => {
+            Papa.parse(DATA_SOURCE_EXAM + '&t=' + Date.now(), {
+                download: true, header: false, skipEmptyLines: true,
+                complete: res => {
+                    if(res.data && res.data.length > 1) {
+                        examList = res.data.slice(1).map(r => ({
+                            id: (r[0]||"").trim(),
+                            name: (r[1]||"未命名").trim(),
+                            status: (r[4]||"ON").trim().toUpperCase() // 讀取 E 欄狀態
+                        })).filter(e => e.id !== "");
+                    }
+                    resolve();
+                }, 
+                error: (err) => {
+                    console.error("試卷清單讀取失敗", err);
+                    resolve(); 
+                }
+            });
+        });
+    }
+
+    async function updateData() {
+        try {
+            const [m, n, newExamRecs] = await Promise.all([ 
+                fetchRecords(DATA_SOURCE_MATH, 'math'), 
+                fetchRecords(DATA_SOURCE_NATURE, 'nature'),
+                fetchRecords(DATA_SOURCE_NEW_EXAM_RECORDS, 'math')
+            ]);
+            
+            const oldMath = Array.isArray(m) ? m : [];
+            const newExams = Array.isArray(newExamRecs) ? newExamRecs : [];
+            const oldNature = Array.isArray(n) ? n : [];
+
+            rawMathRecords = [...oldMath, ...newExams];
+            rawNatureRecords = oldNature;
+
+            updateDropdown('math'); updateDropdown('nature');
+            autoDiscoveredStudents.clear();
+            [...rawMathRecords, ...rawNatureRecords].forEach(r => autoDiscoveredStudents.set(r.name, r.id || r.name));
+            
+            calculateActiveStatus([...rawMathRecords, ...rawNatureRecords]);
+            renderSidebar();
+            aggregateAllData();
+            
+            if (currentSelectedStudent) renderCombatView(currentSelectedStudent.name);
+            if (currentRadarTopic) renderTopicRadar(currentRadarTopic);
+            if(document.getElementById('activityModal').style.display === 'flex') renderActivityLog();
+            if(document.getElementById('examModal').style.display === 'flex') {
+                populateExamSelect(); // 更新下拉選單狀態
+                renderExamReport(); 
+            }
+            
+            const pickerVal = document.getElementById('raw-date-picker').value; 
+            const targetDateStr = new Date(pickerVal).toLocaleDateString('zh-TW'); 
+            document.getElementById('raw-title-date').innerText = targetDateStr;
+            latestRawRecords = [...rawMathRecords, ...rawNatureRecords].filter(r => r.dateStr === targetDateStr).sort((a,b) => b.timeVal - a.timeVal);
+            
+            document.getElementById('update-time').innerText = `更新於 ${new Date().toLocaleTimeString()}`;
+        } catch (e) {
+            console.error("更新數據過程發生錯誤", e);
+        }
+    }
+
+    function fetchRecords(url, type) {
+        return new Promise(resolve => {
+            Papa.parse(url + '&t=' + Date.now(), {
+                download: true, header: false, skipEmptyLines: true,
+                complete: res => {
+                    let records = [];
+                    let topicSet = (type === 'math' ? dbMathTopics : dbNatureTopics);
+                    if(topicSet) topicSet.clear();
+
+                    if (res.data && res.data.length > 1) {
+                        res.data.slice(1).forEach(row => {
+                            let t = parseSmartTime(row[0], row[8]); if(!t) return;
+                            
+                            let rawTopic = row[3] || "";
+                            let topicName = rawTopic.replace(/：/g, ':').trim();
+                            let difficulty = (row[4]||'').trim();
+                            if (difficulty) {
+                                topicName += ` (${difficulty})`;
+                            }
+
+                            if(topicName && topicSet) topicSet.add(topicName);
+
+                            let col1 = (row[1]||'').trim(), col2 = (row[2]||'').trim();
+                            let name = col2, id = col1;
+                            if(/[\u4e00-\u9fa5]/.test(col1) && !/[\u4e00-\u9fa5]/.test(col2)) { name = col1; id = col2; } else if (!name) name = col1;
+                            if(!name) return;
+                            let total = parseInt(row[6]) || 1; 
+                            let correct = parseInt(row[5]);
+                            if (isNaN(correct)) { let score = parseInt(row[7]); if (total === 1) { correct = (score === 1 || score === 100) ? 1 : 0; } else { correct = Math.round((score / 100) * total); } }
+                            records.push({
+                                timeVal: t, timeStr: new Date(t).toLocaleString('zh-TW', {hour12:false}), dateStr: new Date(t).toLocaleDateString('zh-TW'), 
+                                id: id, name: name, topic: topicName, correct: correct, total: total, score: Math.round((correct/total)*100) || 0,
+                                wrongJson: row[8], rawJ: row[9]||"", sub: type === 'math' ? '數' : '自'
+                            });
+                        });
+                    }
+                    resolve(records);
+                }, 
+                error: (err) => {
+                    console.error("讀取失敗:", url, err);
+                    resolve([]); 
+                }
+            });
+        });
+    }
+
+    function calculateActiveStatus(allRecords) {
+        todayActivityMap.clear();
+        const now = new Date();
+        const todayStr = now.toLocaleDateString('zh-TW');
+        const yest = new Date(now); yest.setDate(yest.getDate()-1);
+        const yestStr = yest.toLocaleDateString('zh-TW');
+        allRecords.forEach(r => {
+            if (!todayActivityMap.has(r.name)) todayActivityMap.set(r.name, {today:false, yest:false});
+            let s = todayActivityMap.get(r.name);
+            if (r.dateStr === todayStr) s.today = true;
+            if (r.dateStr === yestStr) s.yest = true;
+        });
+    }
+
+    function updateDropdown(type) { 
+        const sel = document.getElementById(`${type}-select`);
+        const list = Array.from(type === 'math' ? dbMathTopics : dbNatureTopics).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+        sel.innerHTML = `<option value="">-- 選擇${type==='math'?'數學':'自然'}單元 --</option>`; 
+        list.forEach(t => { let o = document.createElement('option'); o.value = t; o.innerText = t; sel.appendChild(o); }); 
+        checkMissionBtn(type);
+    }
+
+    function aggregateAllData() {
+        aggregatedData = {};
+        [...rawMathRecords, ...rawNatureRecords].forEach(r => {
+            if (!aggregatedData[r.name]) aggregatedData[r.name] = {};
+            if (!aggregatedData[r.name][r.topic]) aggregatedData[r.name][r.topic] = {};
+            let dateKey = r.dateStr; 
+            if (!aggregatedData[r.name][r.topic][dateKey]) aggregatedData[r.name][r.topic][dateKey] = { date: r.timeVal, correct: 0, total: 0, score: 0, sub: r.sub, rawRecords: [] };
+            let d = aggregatedData[r.name][r.topic][dateKey]; d.correct += r.correct; d.total += r.total; d.rawRecords.push(r); if(r.timeVal > d.date) d.date = r.timeVal;
+        });
+        for (let name in aggregatedData) {
+            for (let topic in aggregatedData[name]) {
+                for (let date in aggregatedData[name][topic]) {
+                    let d = aggregatedData[name][topic][date]; d.score = Math.round((d.correct / d.total) * 100);
+                }
+            }
+        }
+    }
+
+    function getStudentLast7DaysActivity(name) {
+        let result = [];
+        const today = new Date();
+        for (let i = 6; i >= 0; i--) {
+            let d = new Date();
+            d.setDate(today.getDate() - i);
+            let dStr = d.toLocaleDateString('zh-TW');
+            let totalQ = 0;
+            [...rawMathRecords, ...rawNatureRecords].forEach(r => {
+                if (r.name === name && r.dateStr === dStr) {
+                    totalQ += r.total;
+                }
+            });
+            result.push({
+                dateStr: dStr,
+                shortDate: `${d.getMonth()+1}/${d.getDate()}`,
+                count: totalQ
+            });
+        }
+        return result;
+    }
+
+    function openActivityModal() { document.getElementById('activityModal').style.display = 'flex'; renderActivityLog(); }
+    function closeActivityModal() { document.getElementById('activityModal').style.display = 'none'; }
+    function renderActivityLog() {
+        const dateInput = document.getElementById('activity-date-picker').value;
+        const targetDateStr = new Date(dateInput).toLocaleDateString('zh-TW');
+        const tbody = document.getElementById('activity-table-body');
+        const table = document.getElementById('activity-table');
+        const emptyMsg = document.getElementById('activity-empty-msg');
+        tbody.innerHTML = '';
+        let all = [...rawMathRecords, ...rawNatureRecords].filter(r => r.dateStr === targetDateStr);
+        if (all.length === 0) { table.style.display = 'none'; emptyMsg.style.display = 'block'; return; } else { table.style.display = 'table'; emptyMsg.style.display = 'none'; }
+        let summary = {}; 
+        all.forEach(r => {
+            if (!summary[r.name]) summary[r.name] = { totalQ: 0, mathQ: 0, natureQ: 0, topics: new Map(), times: [], id: r.id };
+            let s = summary[r.name]; s.totalQ += r.total; if (r.sub === '數') s.mathQ += r.total; else s.natureQ += r.total; s.times.push(r.timeVal);
+            let tKey = `[${r.sub}] ${r.topic}`; s.topics.set(tKey, (s.topics.get(tKey) || 0) + r.total);
+        });
+        let sortedNames = Object.keys(summary).sort((a,b) => summary[b].totalQ - summary[a].totalQ);
+        sortedNames.forEach(name => {
+            let data = summary[name]; data.times.sort((a,b) => a - b);
+            let startTime = new Date(data.times[0]).toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit'});
+            let endTime = new Date(data.times[data.times.length-1]).toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit'});
+            let timeDisplay = (data.times.length > 1) ? `${startTime} ~ ${endTime}` : startTime;
+            let topicHtml = ''; data.topics.forEach((count, title) => { let css = title.includes('數') ? 'lb-math' : 'lb-nature'; topicHtml += `<span class="log-badge ${css}">${title} <span class="lb-count">${count}題</span></span>`; });
+            let qColor = '#2d3436'; if (data.totalQ >= 20) qColor = '#d35400'; else if (data.totalQ >= 10) qColor = '#2980b9';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td style="font-weight:bold; font-size:1.1rem;">${name} <br><button class="resolve-btn" style="margin-top:5px;" onclick="selectStudent('${name}', '${data.id}'); closeActivityModal();">查看戰力</button></td><td style="color:${qColor}; font-weight:800; font-size:1.2rem;">${data.totalQ} <span style="font-size:0.8rem; color:#999;">題</span></td><td style="font-family:Consolas, monospace; color:#636e72;">${timeDisplay}</td><td>${topicHtml}</td>`;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function openExamModal() {
+        document.getElementById('examModal').style.display = 'flex';
+        populateExamSelect();
+    }
+    function closeExamModal() { document.getElementById('examModal').style.display = 'none'; }
+
+    // ✅ 修正：過濾掉 "上課紀錄"
+    function populateExamSelect() {
+        const showActive = document.getElementById('show-active-only').checked;
+        const sel = document.getElementById('exam-selector');
+        // 保存目前選中的值，以免刷新時跳掉
+        const currentVal = sel.value;
+        
+        sel.innerHTML = '<option value="">-- 請選擇一份試卷 --</option>';
+        
+        // 1. 先排除 "上課紀錄" 開頭的項目
+        let displayList = examList.filter(e => !e.name.startsWith("上課紀錄"));
+
+        // 2. 再根據 checkbox 決定是否只顯示 ON
+        if (showActive) {
+            displayList = displayList.filter(e => e.status === 'ON');
+        }
+
+        [...displayList].reverse().forEach(e => {
+            let opt = document.createElement('option');
+            opt.value = e.id;
+            opt.text = `${e.name} (${e.id})` + (e.status !== 'ON' ? ' [已關閉]' : '');
+            sel.appendChild(opt);
+        });
+
+        // 嘗試恢復選取
+        if (currentVal) sel.value = currentVal;
+    }
+
+    function renderExamReport() {
+        const examId = document.getElementById('exam-selector').value;
+        const tbody = document.getElementById('exam-table-body');
+        const statCount = document.getElementById('exam-stat-count');
+        const statAvg = document.getElementById('exam-stat-avg');
+        
+        tbody.innerHTML = '';
+        statCount.innerText = '0';
+        statAvg.innerText = '0';
+        
+        if(!examId) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:50px; color:#95a5a6;">請選擇試卷</td></tr>';
+            return;
+        }
+
+        let matchedRecords = [...rawMathRecords, ...rawNatureRecords].filter(r => r.rawJ === examId);
+
+        if(matchedRecords.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:50px; color:#c0392b;">尚無學生繳交此試卷</td></tr>';
+            return;
+        }
+
+        matchedRecords.sort((a,b) => {
+            if(b.score !== a.score) return b.score - a.score;
+            return a.timeVal - b.timeVal;
+        });
+
+        let totalScore = 0;
+        
+        matchedRecords.forEach((r, idx) => {
+            totalScore += r.score;
+            const tr = document.createElement('tr');
+            let rankHtml = `<span style="font-weight:bold; color:#7f8c8d;">${idx+1}</span>`;
+            if(idx === 0) rankHtml = `<i class="fas fa-crown" style="color:#f1c40f;"></i> 1`;
+            else if(idx === 1) rankHtml = `<i class="fas fa-medal" style="color:#bdc3c7;"></i> 2`;
+            else if(idx === 2) rankHtml = `<i class="fas fa-medal" style="color:#e67e22;"></i> 3`;
+
+            let scoreColor = r.score >= 80 ? '#27ae60' : (r.score >= 60 ? '#e67e22' : '#c0392b');
+            let wrongHtml = '';
+            if (r.score === 100) {
+                wrongHtml = '<span style="color:#27ae60; font-weight:bold;"><i class="fas fa-check-circle"></i> 全對 (Perfect)</span>';
+            } else {
+                try {
+                    if (r.wrongJson) {
+                         JSON.parse(r.wrongJson).forEach(x=>{ 
+                            let qid = (x.quizId || x.id || '').trim(); 
+                            if(qid) wrongHtml += `<a href="javascript:void(0)" class="err-btn" onclick="openVideo('${qid}')"><i class="fas fa-play-circle"></i> ${qid}</a> `;
+                         });
+                    }
+                } catch(e){}
+            }
+
+            tr.innerHTML = `
+                <td style="text-align:center; font-size:1.1rem;">${rankHtml}</td>
+                <td style="font-weight:bold;">
+                    ${r.name}
+                    <button class="resolve-btn" style="font-size:0.7rem; padding:1px 5px; margin-left:5px;" onclick="closeExamModal(); selectStudent('${r.name}', '${r.id}')">查看</button>
+                </td>
+                <td style="color:${scoreColor}; font-weight:800; font-size:1.2rem;">${r.score}</td>
+                <td style="color:#7f8c8d;">${r.correct} / ${r.total}</td>
+                <td style="font-size:0.9rem; color:#7f8c8d;">${r.timeStr}</td>
+                <td>${wrongHtml}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        statCount.innerText = matchedRecords.length;
+        statAvg.innerText = Math.round(totalScore / matchedRecords.length);
+    }
+
+    function analyzeCombatPower(records) {
+        const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        const recentRecs = records.filter(r => (now - r.date) < TWO_WEEKS && r.total > 0);
+        if (recentRecs.length === 0) return { status: 'inactive', diff: 0, label: '歷史封存' };
+        if (recentRecs.length === 1) return { status: 'new', diff: 0, label: '新進單元' };
+        
+        let last = recentRecs[0]; 
+        let prev = recentRecs[1]; 
+        let diff = last.score - prev.score;
+
+        if (diff > 0) return { status: 'up', diff: diff, label: '戰力上升' };
+        if (diff < 0) return { status: 'down', diff: Math.abs(diff), label: '戰力下降' };
+        return { status: 'flat', diff: 0, label: '持平' };
+    }
+
+    function renderCombatView(name) {
+        const view = document.getElementById('combat-view');
+        view.innerHTML = '';
+        
+        const activityData = getStudentLast7DaysActivity(name);
+        let activityHtml = `<div class="week-activity-box"><div class="wa-title">七日練功</div><div class="wa-days">`;
+        activityData.forEach(d => {
+            let css = d.count > 0 ? 'wa-active' : 'wa-inactive';
+            let content = d.count > 0 ? d.count : '-';
+            activityHtml += `<div class="wa-day" title="${d.dateStr}: 練習 ${d.count} 題"><div class="wa-dot ${css}">${content}</div><div class="wa-date">${d.shortDate}</div></div>`;
+        });
+        activityHtml += `</div></div>`;
+
+        const header = document.createElement('div');
+        header.className = 'student-header';
+        header.innerHTML = `
+            <div style="display:flex; flex-direction:column;">
+                <h2 style="margin:0; color:var(--dark); margin-bottom:5px;">${name}</h2>
+                <span style="color:#64748b; font-size:0.9rem;">單元戰力分析表 (近14天趨勢)</span>
+            </div>
+            ${activityHtml}
+            <div><button class="sys-btn" onclick="showDetail('${name}')">查看完整歷史</button></div>
+        `;
+        view.appendChild(header);
+
+        if (!aggregatedData[name]) { view.innerHTML += '<div style="text-align:center; padding:50px; color:#aaa;">尚無該生數據</div>'; return; }
+
+        const grid = document.createElement('div'); grid.className = 'topic-grid';
+        let allTopics = [];
+        for (let topic in aggregatedData[name]) {
+            let records = Object.values(aggregatedData[name][topic]).sort((a,b) => b.date - a.date);
+            allTopics.push({ topic: topic, records: records, analysis: analyzeCombatPower(records), sub: records[0].sub });
+        }
+        allTopics.sort((a, b) => {
+            if (a.analysis.status === 'inactive' && b.analysis.status !== 'inactive') return 1;
+            if (a.analysis.status !== 'inactive' && b.analysis.status === 'inactive') return -1;
+            return b.records[0].date - a.records[0].date;
+        });
+
+        allTopics.forEach(t => {
+            const card = document.createElement('div');
+            card.className = 'topic-card';
+            if (currentRadarTopic === t.topic) card.classList.add('selected');
+            card.onclick = (e) => { document.querySelectorAll('.topic-card').forEach(c => c.classList.remove('selected')); card.classList.add('selected'); renderTopicRadar(t.topic); };
+
+            let lastRec = t.records[0];
+            let scoreClass = lastRec.score >= 80 ? 'score-good' : (lastRec.score >= 60 ? 'score-mid' : 'score-bad');
+            let trendHtml = '';
+            switch(t.analysis.status) {
+                case 'up': trendHtml = `<span class="trend-up"><i class="fas fa-arrow-up"></i> ${t.analysis.label}</span>`; break;
+                case 'down': trendHtml = `<span class="trend-down"><i class="fas fa-arrow-down"></i> ${t.analysis.label}</span>`; break;
+                case 'flat': trendHtml = `<span class="trend-flat"><i class="fas fa-minus"></i> ${t.analysis.label}</span>`; break;
+                case 'new': trendHtml = `<span class="trend-new"><i class="fas fa-star"></i> ${t.analysis.label}</span>`; break;
+                default: trendHtml = `<span class="trend-old"><i class="fas fa-history"></i> ${t.analysis.label}</span>`; break;
+            }
+
+            let badgeClass = 'tc-sub-badge ';
+            if (t.topic.includes('(A)')) badgeClass += 'bg-level-a';
+            else if (t.topic.includes('(B)')) badgeClass += 'bg-level-b';
+            else if (t.topic.includes('(C)')) badgeClass += 'bg-level-c';
+            else badgeClass += (t.sub==='數'?'bg-math':'bg-nature');
+
+            card.innerHTML = `<div class="tc-header"><div class="tc-title"><span class="${badgeClass}">${t.sub}</span>${t.topic}</div></div><div class="score-display ${scoreClass}">${lastRec.score}% <span style="font-size:0.9rem; font-weight:normal; color:#636e72;">(${lastRec.correct}/${lastRec.total})</span></div><div class="tc-stat-row"><div class="trend-box">${trendHtml}</div></div><div style="font-size:0.8rem; color:#94a3b8; margin-top:5px; text-align:right;">${new Date(lastRec.date).toLocaleDateString('zh-TW')}</div>`;
+            grid.appendChild(card);
+        });
+        view.appendChild(grid);
+    }
+
+    function renderTopicRadar(topicName) {
+        currentRadarTopic = topicName;
+        document.getElementById('radar-topic-title').innerText = topicName;
+        document.getElementById('radar-topic-title').style.color = 'var(--math-color)';
+        const content = document.getElementById('radar-content'); content.innerHTML = ''; 
+        let radarList = [];
+        for (let studentName in aggregatedData) {
+            if (aggregatedData[studentName][topicName]) {
+                let records = Object.values(aggregatedData[studentName][topicName]).sort((a,b) => b.date - a.date);
+                radarList.push({ name: studentName, id: autoDiscoveredStudents.get(studentName) || studentName, lastScore: records[0].score, lastDate: records[0].date, analysis: analyzeCombatPower(records), records: records });
+            }
+        }
+        if (radarList.length === 0) { content.innerHTML = '<div style="text-align:center; padding:20px;">無人考過此單元</div>'; return; }
+        
+        radarList.sort((a, b) => { let sA=0, sB=0; if(a.analysis.status==='down') sA+=1000; if(b.analysis.status==='down') sB+=1000; if(a.lastScore<60) sA+=500; if(b.lastScore<60) sB+=500; return sB - sA; });
+        
+        let table = document.createElement('table'); table.className = 'radar-table';
+        
+        table.innerHTML = `<thead><tr><th width="100">學生</th><th width="100">戰力狀態</th><th width="80">成績</th><th width="110">測驗日</th><th>該單元錯題 (題號)</th><th width="150">操作</th></tr></thead>`;
+        
+        let tbody = document.createElement('tbody');
+        radarList.forEach(item => {
+            let tr = document.createElement('tr');
+            if (item.analysis.status === 'down' || item.lastScore < 60) tr.className = 'radar-row-alert';
+            
+            let statusIcon = '';
+            if (item.analysis.status === 'down') statusIcon = '<i class="fas fa-arrow-down" style="color:var(--danger)"></i> 下降';
+            else if (item.analysis.status === 'up') statusIcon = '<i class="fas fa-arrow-up" style="color:var(--success)"></i> 上升';
+            else if (item.analysis.status === 'flat') statusIcon = '<span style="color:var(--warn)">- 持平</span>';
+            else if (item.analysis.status === 'new') statusIcon = '<span style="color:#0984e3">★ 新進</span>';
+            else statusIcon = '<span style="color:#b2bec3">歷史</span>';
+            
+            let scoreColor = item.lastScore >= 80 ? 'green' : (item.lastScore >= 60 ? 'orange' : 'red');
+
+            let wrongHtml = '';
+            let lastRec = item.records[0]; 
+            
+            if (lastRec.score === 100) {
+                 wrongHtml = '<span style="color:#27ae60; font-weight:bold; font-size:0.9rem;"><i class="fas fa-check-circle"></i> 全對</span>';
+            } else {
+                if (lastRec.rawRecords && lastRec.rawRecords.length > 0) {
+                     lastRec.rawRecords.forEach(r => {
+                        if(r.wrongJson) { 
+                            try { 
+                                JSON.parse(r.wrongJson).forEach(x=>{ 
+                                    let qid = (x.quizId || x.id || '').trim(); 
+                                    if(qid) {
+                                        wrongHtml += `<a href="javascript:void(0)" class="err-btn" onclick="openVideo('${qid}')" title="點擊觀看解題"><i class="fas fa-play-circle"></i> ${qid}</a> `;
+                                    }
+                                }); 
+                            } catch(e){} 
+                        }
+                    });
+                }
+                if (wrongHtml === '') wrongHtml = '<span style="color:#b2bec3;">無錯題紀錄</span>';
+            }
+
+            tr.innerHTML = `<td style="font-weight:bold;">${item.name}</td>
+                            <td>${statusIcon}</td>
+                            <td style="color:${scoreColor}; font-weight:bold; font-size:1.1rem;">${item.lastScore}</td>
+                            <td style="color:#636e72;">${new Date(item.lastDate).toLocaleDateString('zh-TW')}</td>
+                            <td>${wrongHtml}</td>
+                            <td><button class="resolve-btn" onclick="selectStudent('${item.name}', '${item.id}')">切換</button> <button class="resolve-btn" onclick="showDetail('${item.name}')">明細</button></td>`;
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody); content.appendChild(table);
+    }
+
+    function selectStudent(name, id) {
+        let fullDetail = dbStudentsDetail.find(s => s.name === name || s.id === id);
+        currentSelectedStudent = fullDetail || { name: name, id: id, pwd: "" };
+        document.getElementById('mission-target-student').innerText = `${name} (${id})`;
+        document.querySelectorAll('.student-card').forEach(c => c.classList.remove('active'));
+        let card = document.querySelector(`.student-card[data-name="${name}"]`);
+        if(card) { card.classList.add('active'); card.scrollIntoView({behavior: "smooth", block: "center"}); }
+        renderCombatView(name);
+    }
+
+    function renderSidebar() {
+        const list = document.getElementById('student-list'); list.innerHTML = '';
+        Array.from(autoDiscoveredStudents.keys()).sort().forEach(n => {
+            let d = document.createElement('div'); d.className = 'student-card'; d.dataset.name = n;
+            let statusHtml = '';
+            if (todayActivityMap.has(n)) {
+                let s = todayActivityMap.get(n);
+                if (s.today) statusHtml = '<span class="stu-status-icon" title="今日已練">🔥</span>';
+                else if (s.yest) statusHtml = '<span class="stu-status-icon" style="color:#aaa;" title="昨日有練">⏱️</span>';
+            }
+            d.innerHTML = `<span>${n} ${statusHtml}</span>`;
+            d.onclick = () => { selectStudent(n, autoDiscoveredStudents.get(n)); };
+            list.appendChild(d);
+        });
+    }
+
+    function openAlertModal() {
+        document.getElementById('alertModal').style.display = 'flex';
+        renderAlertUI();
+    }
+    function closeAlertModal() { 
+        document.getElementById('alertModal').style.display = 'none'; 
+        if (isScrolling) toggleAutoScroll();
+    }
+
+    function renderAlertUI() {
+        const threshold = parseInt(document.getElementById('alert-modal-threshold').value) || 60;
+        const grid = document.getElementById('alert-grid');
+        grid.innerHTML = '';
+
+        let alertList = [];
+        const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+
+        for (let studentName in aggregatedData) {
+            for (let topic in aggregatedData[studentName]) {
+                let records = Object.values(aggregatedData[studentName][topic]).sort((a,b) => b.date - a.date);
+                if (records.length > 0 && (now - records[0].date < TWO_WEEKS)) {
+                    let lastRec = records[0];
+                    if (lastRec.score < threshold && lastRec.score > 0) {
+                        alertList.push({
+                            name: studentName,
+                            id: autoDiscoveredStudents.get(studentName),
+                            topic: topic,
+                            score: lastRec.score,
+                            date: lastRec.date,
+                            sub: lastRec.sub
+                        });
+                    }
+                }
+            }
+        }
+
+        alertList.sort((a,b) => {
+            if (a.score !== b.score) return a.score - b.score;
+            return b.date - a.date;
+        });
+
+        if (alertList.length === 0) {
+            grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:50px; color:#aaa; font-size:1.2rem;">🎉 太棒了！最近兩週沒有學生低於此分數標準 (且大於0分)。</div>';
+            return;
+        }
+
+        alertList.forEach(item => {
+            let card = document.createElement('div');
+            card.className = 'alert-card-item';
+            
+            let tagText = item.sub;
+            if (item.topic.includes('(A)')) tagText += ' A';
+            else if (item.topic.includes('(B)')) tagText += ' B';
+            else if (item.topic.includes('(C)')) tagText += ' C';
+            
+            card.innerHTML = `
+                <div class="ac-tag">${tagText}</div>
+                <div class="ac-name">${item.name}</div>
+                <div class="ac-topic">${item.topic}</div>
+                <div class="ac-score">${item.score}%</div>
+                <div class="ac-date">${new Date(item.date).toLocaleDateString('zh-TW')}</div>
+            `;
+            card.style.cursor = 'pointer';
+            card.onclick = () => {
+                closeAlertModal();
+                selectStudent(item.name, item.id);
+            };
+            grid.appendChild(card);
+        });
+    }
+
+    function toggleAutoScroll() {
+        const btn = document.getElementById('btn-auto-scroll');
+        const container = document.getElementById('alert-grid-container');
+        
+        if (isScrolling) {
+            clearInterval(scrollTimer);
+            isScrolling = false;
+            btn.classList.remove('btn-scroll-active');
+            btn.innerHTML = '<i class="fas fa-play"></i> 自動捲動';
+        } else {
+            isScrolling = true;
+            btn.classList.add('btn-scroll-active');
+            btn.innerHTML = '<i class="fas fa-pause"></i> 停止捲動';
+            
+            scrollTimer = setInterval(() => {
+                if (container.matches(':hover')) return;
+                if (container.scrollTop + container.clientHeight >= container.scrollHeight) {
+                    container.scrollTop = 0; 
+                } else {
+                    container.scrollTop += 1; 
+                }
+            }, 40); 
+        }
+    }
+
+    function showDetail(name) {
+        const col = document.getElementById('col-record'); col.classList.add('open');
+        const btn = document.getElementById('toggle-data-btn'); btn.classList.add('open'); btn.querySelector('i').className = 'fas fa-chevron-right';
+        let history = []; let topics = aggregatedData[name] || {};
+        for(let t in topics) for(let d in topics[t]) history.push({topic: t, ...topics[t][d]});
+        history.sort((a,b) => b.date - a.date); 
+        const content = document.getElementById('detail-content');
+        content.innerHTML = `<h3 style="margin-top:0;">${name} 的學習歷程</h3>` + history.map(h => {
+            let color = h.score >= 80 ? 'var(--success)' : (h.score >= 60 ? 'var(--warn)' : 'var(--danger)');
+            let wrongHtml = '';
+            h.rawRecords.forEach(r => {
+                if(r.wrongJson) { try { JSON.parse(r.wrongJson).forEach(x=>{ let qid=x.quizId||x.id; wrongHtml+=`<a href="javascript:void(0)" class="err-btn" onclick="openVideo('${qid}')"><i class="fas fa-play-circle"></i> ${qid}(${x.wrong||'?'})</a>` }); } catch(e){} }
+            });
+            return `<div style="padding:10px; border-bottom:1px solid #eee; margin-bottom:5px;"><div style="display:flex; justify-content:space-between; font-weight:bold;"><span>${h.sub==='數'?'➗':'🧪'} ${h.topic}</span><span style="color:${color}">${h.score}% (${h.correct}/${h.total})</span></div><div style="font-size:0.8rem; color:#aaa; margin:5px 0;">${new Date(h.date).toLocaleString('zh-TW')}</div><div style="margin-top:5px;">${wrongHtml}</div></div>`;
+        }).join('');
+    }
+
+    function toggleRecordColumn() { const col = document.getElementById('col-record'); const btn = document.getElementById('toggle-data-btn'); const icon = btn.querySelector('i'); if(col.classList.contains('open')) { col.classList.remove('open'); btn.classList.remove('open'); icon.className = 'fas fa-chevron-left'; } else { col.classList.add('open'); btn.classList.add('open'); icon.className = 'fas fa-chevron-right'; } }
+    function toggleRadarPanel() { const panel = document.getElementById('topic-radar-panel'); const icon = document.getElementById('radar-toggle-icon'); if (panel.classList.contains('collapsed')) { panel.classList.remove('collapsed'); icon.className = 'fas fa-chevron-down'; } else { panel.classList.add('collapsed'); icon.className = 'fas fa-chevron-up'; } }
+
+    function openMissionModal() { 
+        document.getElementById('missionModal').style.display = 'flex'; 
+        document.getElementById('qr-area-math').classList.remove('active'); 
+        document.getElementById('qr-area-nature').classList.remove('active'); 
+        checkMissionBtn('math');
+        checkMissionBtn('nature');
+    }
+    function closeMissionModal() { document.getElementById('missionModal').style.display = 'none'; }
+    
+    function checkMissionBtn(type) {
+        const val = document.getElementById(`${type}-select`).value;
+        const btn = document.getElementById(`btn-${type}`);
+        btn.innerHTML = (type==='math'?'發送數學任務':'發送自然任務') + ' <i class="fas fa-paper-plane"></i>';
+        if(val && val !== "") {
+            btn.classList.add('active-btn');
+            btn.disabled = false;
+        } else {
+            btn.classList.remove('active-btn');
+            btn.disabled = true;
+        }
+    }
+
+    function generateMission(type) {
+        if (!currentSelectedStudent) { alert("請先從左側選擇一位學生！"); return; }
+        const rawTopic = document.getElementById(`${type}-select`).value; 
+        if (!rawTopic) { alert("請選擇單元！"); return; }
+
+        const topicForUrl = rawTopic.replace(/\s*\([^)]+\)$/, '').trim();
+        const btn = document.getElementById(`btn-${type}`);
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 🚀 發送中...';
+        
+        let baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/')) + '/';
+        const targetFile = (type === 'math') ? 'math.html' : 'nature.html'; 
+        const exp = Date.now() + (3 * 3600000); 
+        
+        const fullUrl = `${baseUrl}${targetFile}?user=${encodeURIComponent(currentSelectedStudent.id)}&name=${encodeURIComponent(currentSelectedStudent.name)}&pwd=${encodeURIComponent(currentSelectedStudent.pwd)}&topic=${encodeURIComponent(topicForUrl)}&exp=${exp}`;
+        
+        const other = type==='math'?'nature':'math'; 
+        document.getElementById(`qr-area-${other}`).classList.remove('active');
+        
+        const qrArea = document.getElementById(`qr-area-${type}`); 
+        const qrBox = document.getElementById(`qrcode-${type}`); 
+        qrBox.innerHTML = ''; 
+        
+        new QRCode(qrBox, { text: fullUrl, width: 256, height: 256, colorDark: type==='math'?"#4361ee":"#00b894", correctLevel: QRCode.CorrectLevel.M });
+        document.getElementById(`link-${type}`).href = fullUrl; 
+
+        let codeDisplayId = `code-disp-${type}`;
+        if (!document.getElementById(codeDisplayId)) {
+            let div = document.createElement('div');
+            div.style.textAlign = 'center'; div.style.marginTop = '15px';
+            div.innerHTML = `<div style="font-weight:bold; color:#636e72;">🚀 快速傳送門代碼</div><div id="${codeDisplayId}" class="code-display"><span class="loading-txt">連線中...</span></div>`;
+            qrArea.querySelector('.qr-info').appendChild(div);
+        }
+
+        const quickCode = Math.floor(1000 + Math.random() * 9000);
+        const codeEl = document.getElementById(codeDisplayId);
+        codeEl.innerHTML = `<span class="loading-txt">⚡ 同步中...</span>`;
+        codeEl.style.color = 'var(--dark)'; 
+
+        fetch(GAS_URL, {
+            method: 'POST',
+            headers: {'Content-Type': 'text/plain;charset=utf-8'},
+            body: JSON.stringify({ type: 'register_code', code: quickCode, url: fullUrl })
+        })
+        .then(res => res.text())
+        .then(text => {
+            let data = {};
+            try { const jsonText = text.replace(/^;/, ''); data = JSON.parse(jsonText); }
+            catch(e) { throw new Error("GAS 回傳格式錯誤"); }
+            
+            if (data.status === 'registered' || data.code == quickCode) {
+                setTimeout(() => {
+                    codeEl.innerText = quickCode;
+                    codeEl.style.borderColor = (type === 'math' ? 'var(--math-color)' : 'var(--nature-color)');
+                    codeEl.style.color = (type === 'math' ? 'var(--math-color)' : 'var(--nature-color)');
+                    btn.innerHTML = (type==='math'?'發送數學任務':'發送自然任務') + ' <i class="fas fa-check"></i>';
+                }, 800);
+            } else {
+                console.error('GAS Error:', data);
+                codeEl.innerHTML = `<span class="error-txt" style="color:#d63031;">${data.message || '註冊失敗'}</span>`;
+                btn.innerHTML = (type==='math'?'發送數學任務':'發送自然任務') + ' <i class="fas fa-exclamation-triangle"></i>';
+            }
+        })
+        .catch(err => {
+            console.error('Network Error:', err);
+            codeEl.innerHTML = `<span class="error-txt" style="color:#d63031;">連線失敗</span>`;
+            btn.innerHTML = (type==='math'?'發送數學任務':'發送自然任務') + ' <i class="fas fa-times"></i>';
+        });
+
+        qrArea.classList.add('active');
+        
+        setTimeout(() => {
+            const modalBody = document.querySelector('.mission-body');
+            if(modalBody) modalBody.scrollTop = modalBody.scrollHeight;
+        }, 100);
+    }
+
+    function parseSmartTime(str, json) { let t = parseDate(str); if(t > 0) return t; if(json && json.includes('time')) { try { return parseDate(json.match(/time""?\s*:\s*""?([^"\}]+)/)[1]); } catch(e){} } return 0; }
+    function parseDate(s) { if(!s) return 0; s = s.replace(/['"]/g,'').trim(); let isPM = /(下午|PM)/i.test(s); let isAM = /(上午|AM)/i.test(s); let cleanTime = s.replace(/(下午|上午|PM|AM)/ig, '').trim(); let d = new Date(cleanTime); if(isNaN(d.getTime())) return 0; let h = d.getHours(); if (isPM && h < 12) d.setHours(h + 12); else if (isAM && h === 12) d.setHours(0); return d.getTime(); }
+    
+    function filterList(v) { document.querySelectorAll('.student-card').forEach(c => c.style.display = c.innerText.includes(v)?'flex':'none'); }
+    function openVideo(id) { let v = videoMap[id]; if(!v) return alert("無影片"); if(v.includes('youtu')) v = v.replace('watch?v=','embed/').replace('youtu.be/','www.youtube.com/embed/'); document.getElementById('videoFrame').src = v; document.getElementById('videoModal').style.display = 'flex'; }
+    function closeVideo() { document.getElementById('videoModal').style.display='none'; document.getElementById('videoFrame').src=''; }
+    function openRawDataModal() { document.getElementById('rawDataModal').style.display = 'flex'; renderRawTable(); }
+    function closeRawDataModal() { document.getElementById('rawDataModal').style.display = 'none'; resetRawFilter(); }
+    function resetRawFilter() { rawDataFilterName = null; document.getElementById('raw-reset-btn').style.display = 'none'; renderRawTable(); }
+
+    function filterRawByStudent(name) {
+        rawDataFilterName = name;
+        document.getElementById('raw-reset-btn').style.display = 'inline-block';
+        renderRawTable();
+    }
+
+    function renderRawTable() {
+        const tbody = document.getElementById('raw-table-body'); tbody.innerHTML = '';
+        let sortedData = [...latestRawRecords].sort((a, b) => b.timeVal - a.timeVal);
+        
+        if (rawDataFilterName) sortedData = sortedData.filter(r => r.name === rawDataFilterName);
+        document.getElementById('raw-data-count').innerText = `${sortedData.length} 筆` + (rawDataFilterName ? ` (篩選: ${rawDataFilterName})` : '');
+        
+        if (sortedData.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:#aaa;">尚無數據</td></tr>'; return; }
+        
+        sortedData.forEach(r => {
+            const tr = document.createElement('tr');
+            let scoreDisplay = (r.total===1) ? (r.correct===1?'<span class="score-tag score-high">正確</span>':'<span class="score-tag score-low">錯誤</span>') : (Math.round((r.correct/r.total)*100)>=60 ? `<span class="score-tag score-high">${Math.round((r.correct/r.total)*100)}分</span>` : `<span class="score-tag score-low">${Math.round((r.correct/r.total)*100)}分</span>`);
+            let errorHtml = ''; try { if (r.wrongJson) JSON.parse(r.wrongJson).forEach(i => errorHtml += `<div class="err-badge">${i.id||i.quizId} (${i.wrong})</div>`); } catch(e){}
+            
+            tr.innerHTML = `<td>${r.timeStr.split(' ')[1]}</td>
+                            <td><a href="javascript:void(0)" class="raw-student-link" onclick="filterRawByStudent('${r.name}')">${r.name}</a></td>
+                            <td>${r.sub}</td>
+                            <td>${r.topic}</td>
+                            <td>${scoreDisplay}</td>
+                            <td>${errorHtml}</td>
+                            <td><span class="j-col-data">${r.rawJ}</span></td>`;
+            tbody.appendChild(tr);
+        });
+    }
+    
+    window.onclick = function(event) {
+        if (event.target == document.getElementById('videoModal')) closeVideo();
+        if (event.target == document.getElementById('missionModal')) closeMissionModal();
+        if (event.target == document.getElementById('rawDataModal')) closeRawDataModal();
+        if (event.target == document.getElementById('activityModal')) closeActivityModal();
+        if (event.target == document.getElementById('alertModal')) closeAlertModal();
+        if (event.target == document.getElementById('examModal')) closeExamModal();
+    }
+</script>
+</body>
+</html>
