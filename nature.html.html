@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自然教學系統 - 指揮部執行版 (V8.0 數據精準版)</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --primary-color: #4361ee; --secondary-color: #4cc9f0; --accent-color: #f72585; 
+            --success-color: #06d6a0; --warning-color: #ff9f1c; --bg-color: #f8f9fa; 
+            --sidebar-bg: #ffffff; --text-main: #2b2d42; --column-width: 240px; --marquee-height: 32px;
+        }
+        * { box-sizing: border-box; }
+        html, body { font-family: "Segoe UI", "Microsoft JhengHei", sans-serif; margin: 0; padding: 0; background: var(--bg-color); color: var(--text-main); height: 100vh; overflow: hidden; }
+        #expire-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 9999; display: none; flex-direction: column; justify-content: center; align-items: center; color: white; text-align: center; }
+        .app-marquee { position: absolute; top: 0; left: 0; width: 100%; height: var(--marquee-height); line-height: var(--marquee-height); background: linear-gradient(90deg, var(--primary-color), var(--secondary-color)); color: #fff; font-size: 0.9rem; font-weight: bold; overflow: hidden; z-index: 1002; }
+        .app-marquee p { display: inline-block; margin: 0; padding-left: 100%; white-space: nowrap; animation: marquee-scroll 25s linear infinite; }
+        @keyframes marquee-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
+        .user-badge-fixed { position: fixed; top: 40px; right: 20px; z-index: 1001; background: rgba(255, 255, 255, 0.9); border: 1px solid #ddd; padding: 5px 15px; border-radius: 50px; font-size: 0.9rem; font-weight: bold; color: var(--primary-color); box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: none; align-items: center; gap: 8px; }
+        .app-layout { display: flex; height: 100vh; padding-top: var(--marquee-height); }
+        .sidebar { width: var(--column-width); min-width: var(--column-width); background: var(--sidebar-bg); border-right: 1px solid #e0e0e0; display: flex; flex-direction: column; height: 100%; z-index: 10; }
+        .sidebar-header { padding: 15px; border-bottom: 1px solid #f0f0f0; }
+        .sidebar-header h1 { font-size: 1.2rem; color: var(--primary-color); margin: 0; }
+        .main-stepper { padding: 10px; flex: 1; overflow-y: auto; }
+        .step-tab { padding: 10px 12px; margin-bottom: 5px; font-size: 0.9rem; font-weight: 600; color: #666; border-radius: 6px; cursor: pointer; transition: 0.2s; display: flex; justify-content: space-between; align-items: center; }
+        .step-tab.active { background: rgba(67, 97, 238, 0.1); color: var(--primary-color); border-left: 3px solid var(--primary-color); }
+        .sidebar-footer { padding: 10px; border-top: 1px solid #eee; background: #fafafa; }
+        .sidebar-btn { display: block; width: 100%; padding: 8px; margin-top: 5px; text-align: center; border-radius: 6px; text-decoration: none; font-weight: 600; border: none; font-size: 0.9rem; cursor: pointer; color: #fff; }
+        .btn-back { background: #6c757d; } .btn-record { background: var(--secondary-color); }
+        .main-content { flex: 1; display: flex; height: 100%; overflow: hidden; background: #e9ecef; position: relative; }
+        .media-pane { width: 100%; height: 100%; background: #000; display: flex; justify-content: center; align-items: center; overflow: hidden; padding: 20px; }
+        .control-pane { width: var(--column-width); min-width: var(--column-width); background: #fff; border-left: 1px solid #ddd; display: flex; flex-direction: column; padding: 15px; overflow-y: auto; }
+        .nav-btn { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; color: #fff; font-size: 1rem; margin-top: 10px; }
+        .btn-next { background: var(--primary-color); } .btn-finish { background: var(--success-color); }
+        .answer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .answer-btn { background: #fff; border: 2px solid #e9ecef; border-radius: 10px; height: 60px; font-size: 1.4rem; font-weight: 800; cursor: pointer; }
+        #login-overlay { background: rgba(240, 242, 245, 0.95); position:fixed; top:0; left:0; width:100%; height:100%; z-index:2000; display:flex; justify-content:center; align-items:center; }
+        .login-container { background:#fff; padding:40px; border-radius:16px; box-shadow:0 10px 40px rgba(0,0,0,0.1); text-align:center; width:350px; }
+    </style>
+</head>
+<body>
+
+    <div id="expire-overlay"><h1>⌛</h1><h2>任務連結已過期</h2></div>
+    <div id="user-badge" class="user-badge-fixed"><i class="fas fa-user-circle"></i> <span id="badge-name">--</span></div>
+
+    <div id="login-overlay">
+        <div class="login-container">
+            <h1 style="color:var(--primary-color);">自然教學系統</h1>
+            <p style="color: #888;">指揮部派任版</p>
+            <input type="text" id="username" placeholder="帳號" style="width:100%; padding:12px; border:1px solid #ddd; border-radius:8px; margin-bottom:15px;">
+            <input type="password" id="password" placeholder="密碼" style="width:100%; padding:12px; border:1px solid #ddd; border-radius:8px; margin-bottom:20px;">
+            <button class="nav-btn btn-next" onclick="handleLogin()">登入系統</button>
+            <div id="login-error" style="color:var(--accent-color); margin-top:15px;"></div>
+        </div>
+    </div>
+
+    <div id="app-wrapper" style="display:none;">
+        <div class="app-marquee"><p id="marquee-text">... 載入中 ...</p></div>
+        <div id="app-content"></div>
+    </div>
+
+<script>
+    // 1. 基本設定與 URL
+    const GAS_EXEC_URL = "https://script.google.com/macros/s/AKfycbwDeWv1tAmP1X1VkJU_0BTCoKFPRLARvtgA4u-fint8Kq-w5LmkCC7wA_aO4RBvPOTO/exec"; 
+    const CURRENT_SUBJECT = 'Nature'; 
+    const ALL_DATA_FILE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSMZ6vXTQ39GZ2wr-Ce3zBOmc82mYofJDIR2Hp9nRQD5bn8vAuPtJCH-jMO4TXJb6aiZ9NVbmDmZLyF/pub?output=csv';
+    const SECRET_KEY = "Yaohang2025Secure";
+    const COL_KEY_TOPIC=0, COL_TEACH_CATEGORY=1, COL_TEACH_ID=2, COL_TEACH_IMG_URL=3, COL_TEACH_VIDEO_URL=5;
+    const COL_QUIZ_TOPIC=6, COL_QUIZ_DIFFICULTY=7, COL_QUIZ_ID=8, COL_QUIZ_IMG_URL=9, COL_QUIZ_ANSWER=10, COL_QUIZ_VIDEO_URL=11, COL_QUIZ_TYPE_MARKER=14;
+
+    let app = document.getElementById('app-content'), currentQuizLevel = 'C', currentQuizIndex = 0, currentQuizBatch = [], quizScores = { C: { correct: 0, total: 0 }, B: { correct: 0, total: 0 }, A: { correct: 0, total: 0 } }, allLearningBlocks = [], unlockedMainSteps = new Set([1]);
+
+    // 2. 數據上傳核心：根據上課或測驗切換欄位
+    const UserProgressManager = {
+        getUser: () => sessionStorage.getItem('username'),
+        logError: (data) => {
+            const u = UserProgressManager.getUser();
+            const k = `natureApp_error_${u}`;
+            let list = JSON.parse(localStorage.getItem(k) || '[]');
+            data.time = new Date().toLocaleString();
+            list.unshift(data);
+            localStorage.setItem(k, JSON.stringify(list.slice(0, 50)));
+        },
+        uploadToCloud: async (source = 'auto') => {
+            const isAuto = (source === 'auto');
+            const u = sessionStorage.getItem('username'), name = sessionStorage.getItem('displayName');
+            if (!u) return;
+
+            const currentTopic = new URLSearchParams(window.location.search).get('topic') || '一般學習';
+            const errorData = localStorage.getItem(`natureApp_error_${u}`) || '[]';
+            
+            // 判斷當前是否處於測驗狀態
+            const isAtQuiz = !!(document.getElementById('quiz-view-active') || document.getElementById('quiz-result-view'));
+            
+            let payload = {
+                subject: 'Nature', 
+                username: u, 
+                name: name,
+                // --- 核心邏輯切換 ---
+                topic: isAtQuiz ? currentTopic : "",      // 測驗時填 D 欄
+                level: isAtQuiz ? `Level ${currentQuizLevel}` : "", // 測驗時填 E 欄
+                correct: "",                              // 測驗時填 F 欄
+                total: "",                                // 測驗時填 G 欄
+                rate: "",                                 // 測驗時填 H 欄
+                errorDetail: isAtQuiz ? errorData : "",   // 測驗時填 I 欄
+                trace: !isAtQuiz ? [currentTopic] : []    // 上課時填 J 欄 (trace 會被 GAS 轉為字串)
+            };
+
+            if (isAtQuiz) {
+                const s = quizScores[currentQuizLevel];
+                if (s && s.total > 0) {
+                    payload.correct = s.correct;
+                    payload.total = s.total;
+                    payload.rate = Math.round((s.correct / s.total) * 100) + "%";
+                }
+            }
+
+            try {
+                await fetch(GAS_EXEC_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+                console.log("Cloud Sync Success:", payload.level || "Study Mode");
+            } catch (e) { console.error("Cloud Sync Error", e); }
+        }
+    };
+
+    // 3. 登錄與任務派任邏輯 (保持原樣)
+    function handleLogin() {
+        const u = document.getElementById('username').value.trim(), p = document.getElementById('password').value;
+        if(u && p) { startSession(u, u, 'ALL'); }
+    }
+
+    function startSession(id, name, topics) {
+        sessionStorage.setItem('isLoggedIn', 'true'); sessionStorage.setItem('username', id); sessionStorage.setItem('displayName', name);
+        document.getElementById('login-overlay').style.display = 'none'; document.getElementById('app-wrapper').style.display = 'block';
+        document.getElementById('badge-name').innerText = name; document.getElementById('user-badge').style.display = 'flex';
+        initializeApp();
+    }
+
+    async function initializeApp() {
+        const topic = new URLSearchParams(window.location.search).get('topic');
+        const allData = await fetchCSV(ALL_DATA_FILE);
+        if (topic) renderLearningPage(topic, allData);
+        else renderTopicList(allData);
+    }
+
+    // 4. 教學與測驗頁面渲染 (簡化版示意)
+    function renderLearningPage(topic, allData) {
+        const topicNorm = topic.trim();
+        const teachData = allData.filter(r => r[COL_KEY_TOPIC] === topicNorm && r[COL_TEACH_ID]);
+        const quizDataRaw = allData.filter(r => r[COL_QUIZ_TOPIC] === topicNorm && r[COL_QUIZ_ID]);
+
+        // 初始化學習塊
+        allLearningBlocks = [];
+        teachData.forEach(r => {
+            if(r[COL_TEACH_ID].includes('觀念')) allLearningBlocks.push({ concept: r, practice: [] });
+        });
+
+        // 初始化題庫
+        quizLevels = { C: quizDataRaw.filter(r => r[COL_QUIZ_DIFFICULTY] === 'C'), B: [], A: [] };
+
+        app.innerHTML = `<div class="app-layout"><nav class="sidebar"><div class="sidebar-header"><h1>${topicNorm}</h1></div><div class="main-stepper"><div class="step-tab active" onclick="goToStep(1)">1. 觀念學習</div><div class="step-tab" onclick="renderQuizIntro()">🏆 最終檢核</div></div><div class="sidebar-footer"><button class="sidebar-btn btn-record" onclick="UserProgressManager.uploadToCloud('manual')"><i class="fas fa-robot"></i> 手動上傳</button></div></nav><div class="main-content" id="main-container"></div></div>`;
+        
+        goToStep(1);
+    }
+
+    function goToStep(n) {
+        const block = allLearningBlocks[n-1];
+        document.getElementById('main-container').innerHTML = `<div id="study-view" style="display:flex; width:100%;"><div class="media-pane"><iframe src="${block.concept[COL_TEACH_VIDEO_URL].replace('watch?v=', 'embed/')}" allowfullscreen></iframe></div><div class="control-pane"><h2>觀念學習</h2><p>${block.concept[COL_TEACH_ID]}</p><button class="nav-btn btn-next" onclick="renderQuizIntro()">完成，下一步</button></div></div>`;
+        UserProgressManager.uploadToCloud('auto');
+    }
+
+    function renderQuizIntro() {
+        document.getElementById('main-container').innerHTML = `<div style="flex:1; display:flex; justify-content:center; align-items:center;"><div><h1>🏆 最終檢核</h1><button class="nav-btn btn-next" onclick="startQuiz('C')">開始挑戰</button></div></div>`;
+    }
+
+    function startQuiz(lv) {
+        currentQuizLevel = lv; currentQuizIndex = 0;
+        currentQuizBatch = quizLevels[lv].slice(0, 5);
+        quizScores[lv] = { correct: 0, total: currentQuizBatch.length };
+        renderQuizQuestion();
+    }
+
+    function renderQuizQuestion() {
+        if(currentQuizIndex >= currentQuizBatch.length) { renderQuizResult(); return; }
+        const item = currentQuizBatch[currentQuizIndex];
+        document.getElementById('main-container').innerHTML = `<div id="quiz-view-active" style="display:flex; width:100%;"><div class="media-pane"><img src="${item[COL_QUIZ_IMG_URL]}" style="max-height:100%"></div><div class="control-pane"><h2>LEVEL ${currentQuizLevel}</h2><div class="answer-grid">${['A','B','C','D'].map(opt => `<button class="answer-btn" onclick="checkQuizAns('${opt}')">${opt}</button>`).join('')}</div></div></div>`;
+    }
+
+    function checkQuizAns(ans) {
+        const item = currentQuizBatch[currentQuizIndex];
+        if(ans === item[COL_QUIZ_ANSWER]) { quizScores[currentQuizLevel].correct++; }
+        else { UserProgressManager.logError({ topic: item[COL_QUIZ_TOPIC], wrong: ans, correct: item[COL_QUIZ_ANSWER] }); }
+        currentQuizIndex++; renderQuizQuestion();
+    }
+
+    function renderQuizResult() {
+        const s = quizScores[currentQuizLevel];
+        document.getElementById('main-container').innerHTML = `<div id="quiz-result-view" style="flex:1; display:flex; justify-content:center; align-items:center;"><div><h1>結果：${Math.round(s.correct/s.total*100)}%</h1><button class="nav-btn btn-finish" onclick="UserProgressManager.uploadToCloud('auto')">上傳成績</button><br><a href="index.html">返回目錄</a></div></div>`;
+        UserProgressManager.uploadToCloud('auto');
+    }
+
+    // 輔助工具：解析 CSV (簡化版)
+    async function fetchCSV(url) {
+        const res = await fetch(url);
+        const text = await res.text();
+        return Papa.parse(text).data.slice(1);
+    }
+
+    // 任務派任偵測 IIFE (保持原樣)
+    (function(){
+        const urlParams = new URLSearchParams(window.location.search);
+        const autoUser = urlParams.get('user') || urlParams.get('name');
+        if (autoUser) { startSession(autoUser, autoUser, 'ALL'); }
+    })();
+</script>
+</body>
+</html>

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:,">
+    <title>翰學指揮部 - 雲端戰情室 (V30.21)</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        h1 { color: #005a9c; border-bottom: 2px solid #005a9c; padding-bottom: 10px; margin-bottom: 25px; }
+        .marquee-box { background: #fff3cd; padding: 12px; margin: 15px 0; border-radius: 6px; border: 1px solid #ffeeba; display: none; }
+        .marquee-text { color: #856404; font-weight: bold; font-size: 1.1rem; }
+        .step { margin-bottom: 20px; }
+        .step label { display: inline-block; font-weight: bold; margin-bottom: 8px; padding: 6px 12px; background-color: #005a9c; color: white; border-radius: 4px; }
+        .step select, .step input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; margin-top: 5px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #backButton, #logoutButton { background-color: #6c757d; width: auto; padding: 10px 20px; float: right; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
+        th, td { border: 1px solid #ddd; padding: 14px 12px; text-align: left; vertical-align: middle; word-break: break-word; }
+        th { background-color: #005a9c; color: white; }
+        tr:nth-child(even) { background-color: #eef4ff; }
+        .task-link { display: inline-block; padding: 6px 12px; border-radius: 4px; font-weight: bold; text-decoration: none; transition: 0.2s; border: 1px solid transparent; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .task-link:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .link-math { background-color: #e3f2fd; color: #1565c0; border-color: #90caf9; }
+        .link-nature { background-color: #e8f5e9; color: #2e7d32; border-color: #a5d6a7; }
+        .link-normal { background-color: #f3f3f3; color: #333; border-color: #ccc; }
+        #dataStatus { padding: 10px; border-radius: 4px; margin-top: 5px; }
+        .success { background: #e6f7e6; color: green; }
+        .error { background: #FFD2D2; color: red; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="logo-container">
+        <button id="logoutButton" onclick="handleLogout()" style="display: none;">登出</button>
+    </div>
+
+    <div id="marqueeContainer" class="marquee-box">
+        <marquee id="marqueeText" class="marquee-text" behavior="scroll" direction="left" scrollamount="6">載入中...</marquee>
+    </div>
+
+    <div id="loginPage">
+        <h1>系統登入</h1>
+        <div class="step"><label>帳號：</label><input type="text" id="username"></div>
+        <div class="step"><label>密碼：</label><input type="password" id="password"></div>
+        <button onclick="handleLogin()">登入</button>
+        <p id="loginMessage" style="color:red; text-align:center;"></p>
+    </div>
+
+    <div id="queryPage" style="display: none;">
+        <h1>翰學指揮部</h1>
+        <div class="step"><label>1. 資料狀態：</label><p id="dataStatus">初始化...</p></div>
+        <div class="step"><label>2. 選擇班級：</label><select id="classSelect" onchange="handleClassChange()" disabled><option>-- 載入中 --</option></select></div>
+        <div class="step"><label>3. 選擇學生：</label><select id="nameSelect" onchange="handleNameChange()" disabled><option>-- 請先選擇班級 --</option></select></div>
+        <div class="step"><button id="queryButton" onclick="searchTasks()" disabled>查詢進度</button></div>
+    </div>
+
+    <div id="resultsPage" style="display: none;">
+        <button id="backButton" onclick="showQueryPage()">&larr; 返回</button>
+        <h3 id="resultsTitle" style="margin-top: 60px;"></h3>
+        <div id="resultsTableContainer"></div>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // ★★★ 雲端設定區 ★★★
+    // ==========================================
+    
+    // 1. 學生名單 (雲端連結)
+    const LOGIN_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTWz2TWlGJzszh5ReKwUwkrlJFgn_4DA5JA9xByuaCbzy4xOkacmm8JzFC06zpbzl_FH_T_jO56J6_Y/pub?output=csv";
+    
+    // 2. 任務同步區 (已填入您的正式連結)
+    const TASK_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQvHcNuB7mzqEGAscfqC1b5eIfHzw7TgE4ABksFnhE2XgxrfPQ0-FWU70-WWlWKQKt2Twvu7O24JtrG/pub?gid=817553400&single=true&output=csv"; 
+
+    // 3. 系統檔案連結 (請確保 Vercel 上檔案名稱一致)
+    const SYS_MATH_FILE = 'math.html';    
+    const SYS_NATURE_FILE = 'nature.html'; 
+    
+    // ==========================================
+
+    const ADMIN_ACCOUNTS = ['admin', 'persist1117'];
+    const AUTO_REFRESH_INTERVAL = 300000; 
+
+    let allParsedTasks = [], loginUsers = [], loggedInStudentName = null, isAdmin = false;
+    let refreshTimer = null;
+
+    function decodeBuffer(buffer) {
+        const decoder = new TextDecoder('utf-8');
+        let text = decoder.decode(buffer);
+        if (text.charCodeAt(0) === 0xFEFF) text = text.substring(1);
+        return text;
+    }
+
+    async function fetchTextRobust(url) {
+        try {
+            // 自動補上時間戳記防止快取
+            const fetchUrl = url + (url.includes('?') ? '&' : '?') + 't=' + Date.now();
+            const res = await fetch(fetchUrl);
+            if (!res.ok) throw new Error(`Status ${res.status}`);
+            const buffer = await res.arrayBuffer();
+            return decodeBuffer(buffer);
+        } catch (e) { throw e; }
+    }
+
+    function parseCSV_robust(txt) {
+        const lines = txt.split(/\r\n|\r|\n/).filter(l => l.trim());
+        if (lines.length === 0) return [];
+        const h = lines[0].split(',').map(s => s.trim().replace(/"/g,''));
+        
+        const idxClass = h.findIndex(s => s.includes('班級'));
+        const idxName = h.findIndex(s => s.includes('姓名'));
+        const idxOrder = h.findIndex(s => s.includes('任務順序'));
+        const idxKnow = h.findIndex(s => s.includes('知識點'));
+        const idx1 = h.findIndex(s => s.includes('任務1名稱'));
+        const idxRec = h.findIndex(s => s.includes('任務紀錄'));
+
+        if(idxClass === -1 || idxName === -1) return [];
+
+        return lines.slice(1).map(line => {
+            // 簡易 CSV 解析 (處理逗號)
+            const d = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(s => s.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+            
+            let act1_txt = d[idx1] || '';
+            let act1_url = d[idx1+1] || '';
+            let knowledge = d[idxKnow] || '';
+            let className = d[idxClass] || '';
+            
+            // 自動判斷科目連結
+            if (act1_txt && act1_txt.indexOf('上課') > -1) {
+                let cleanTopic = knowledge.replace(/：/g, ':').trim().replace(/^[\(\uff08][\d\uff10-\uff19]+[\)\uff09]\s*/, '');
+                if (className.includes('數學') || className.includes('Math')) {
+                    act1_url = 'MATH:' + cleanTopic;
+                } else if (className.includes('自然') || className.includes('理化') || className.includes('生物')) {
+                    act1_url = 'NATURE:' + cleanTopic;
+                }
+            }
+
+            return {
+                name: d[idxName],
+                className: className,
+                taskOrder: d[idxOrder] || '',
+                knowledge: knowledge,
+                action1_text: act1_txt,
+                action1_url: act1_url,
+                action2_text: d[idx1+2] || '',
+                action2_url: d[idx1+3] || '',
+                action3_text: d[idx1+4] || '',
+                action3_url: d[idx1+5] || '',
+                taskRecord: d[idxRec] || ''
+            };
+        });
+    }
+
+    async function loadLoginData() {
+        try {
+            const txt = await fetchTextRobust(LOGIN_CSV_URL);
+            const lines = txt.split(/\r\n|\r|\n/);
+            const h = lines[0].split(',').map(s=>s.trim().replace(/"/g,''));
+            const idxU = h.findIndex(i => i.includes('帳號'));
+            const idxP = h.findIndex(i => i.includes('密碼'));
+            const idxN = h.findIndex(i => i.includes('顯示名稱'));
+            
+            loginUsers = lines.slice(1).filter(l=>l.trim()).map(l => {
+                const p = l.split(',').map(s=>s.trim().replace(/"/g,''));
+                return { user: p[idxU], pass: p[idxP], name: p[idxN] || p[idxU] };
+            });
+        } catch (e) { document.getElementById('loginMessage').innerText = "無法載入登入資料"; }
+    }
+
+    async function syncCoreData() {
+        const statusDiv = document.getElementById('dataStatus');
+        try {
+            const txt = await fetchTextRobust(TASK_CSV_URL);
+            allParsedTasks = parseCSV_robust(txt);
+            statusDiv.innerText = "資料已同步 (" + new Date().toLocaleTimeString() + ")";
+            statusDiv.className = "success";
+        } catch(e) {
+            statusDiv.innerText = "同步失敗: " + e.message;
+            statusDiv.className = "error";
+        }
+    }
+
+    async function handleLogin() {
+        if(loginUsers.length === 0) await loadLoginData();
+        const u = document.getElementById('username').value.trim();
+        const p = document.getElementById('password').value.trim();
+        const userObj = loginUsers.find(x => x.user === u && x.pass === p);
+        
+        if(userObj) {
+            loggedInStudentName = userObj.name;
+            isAdmin = ADMIN_ACCOUNTS.includes(u);
+            document.getElementById('loginPage').style.display='none';
+            document.getElementById('queryPage').style.display='block';
+            document.getElementById('logoutButton').style.display='inline-block';
+            await syncCoreData();
+            initializeUI();
+            refreshTimer = setInterval(syncCoreData, AUTO_REFRESH_INTERVAL);
+        } else {
+            document.getElementById('loginMessage').innerText = "帳號或密碼錯誤";
+        }
+    }
+
+    function initializeUI() {
+        const classSelect = document.getElementById('classSelect');
+        const nameSelect = document.getElementById('nameSelect');
+        
+        if(isAdmin) {
+            classSelect.disabled = false;
+            nameSelect.disabled = false;
+            const classes = [...new Set(allParsedTasks.map(t=>t.className))].sort();
+            classSelect.innerHTML = '<option value="">-- 請選擇班級 --</option>';
+            classes.forEach(c => classSelect.add(new Option(c,c)));
+        } else {
+            // 學生只能看自己
+            nameSelect.innerHTML = `<option value="${loggedInStudentName}">${loggedInStudentName}</option>`;
+            // 自動找出該學生所在的班級
+            const myTasks = allParsedTasks.filter(t => t.name === loggedInStudentName);
+            const myClasses = [...new Set(myTasks.map(t=>t.className))];
+            classSelect.innerHTML = '';
+            myClasses.forEach(c => classSelect.add(new Option(c,c)));
+            
+            classSelect.disabled = false;
+            nameSelect.disabled = true;
+            document.getElementById('queryButton').disabled = false;
+        }
+    }
+
+    function handleClassChange() {
+        if(!isAdmin) return;
+        const cls = document.getElementById('classSelect').value;
+        const ns = document.getElementById('nameSelect');
+        ns.innerHTML = '<option value="">-- 選擇學生 --</option>';
+        const students = [...new Set(allParsedTasks.filter(t=>t.className===cls).map(t=>t.name))].sort();
+        students.forEach(n => ns.add(new Option(n,n)));
+    }
+
+    function handleNameChange() { document.getElementById('queryButton').disabled = !document.getElementById('nameSelect').value; }
+
+    function createLink(text, url, targetUser) {
+        if(!url || !url.trim() || url.includes('載入中')) return text || '-';
+        let finalUrl = url.trim();
+        let user = targetUser || loggedInStudentName;
+        // 尋找該學生的帳密以自動登入
+        let uObj = loginUsers.find(u => u.name === user);
+        let authParams = uObj ? `&user=${encodeURIComponent(uObj.user)}&pwd=${encodeURIComponent(uObj.pass)}` : `&user=${encodeURIComponent(user)}`;
+
+        if (finalUrl.startsWith('MATH:')) {
+            finalUrl = `${SYS_MATH_FILE}?topic=${encodeURIComponent(finalUrl.replace('MATH:', ''))}${authParams}`;
+            return `<a href="${finalUrl}" target="_blank" class="task-link link-math">${text || '數學任務'}</a>`;
+        } else if (finalUrl.startsWith('NATURE:')) {
+            finalUrl = `${SYS_NATURE_FILE}?lesson=${encodeURIComponent(finalUrl.replace('NATURE:', ''))}${authParams}`;
+            return `<a href="${finalUrl}" target="_blank" class="task-link link-nature">${text || '自然任務'}</a>`;
+        }
+        return `<a href="${finalUrl}" target="_blank" class="task-link link-normal">${text || '開啟'}</a>`;
+    }
+
+    function searchTasks() {
+        const cls = document.getElementById('classSelect').value;
+        const targetName = isAdmin ? document.getElementById('nameSelect').value : loggedInStudentName;
+        const tasks = allParsedTasks.filter(t => t.name === targetName && t.className === cls && t.taskOrder.includes('進度'))
+                                    .sort((a,b) => parseInt(a.taskOrder.replace(/\D/g,'')) - parseInt(b.taskOrder.replace(/\D/g,'')));
+        
+        let html = `<table><thead><tr><th width="80">進度</th><th>科目</th><th>任務1</th><th>任務2</th><th>任務3</th><th width="80">紀錄</th></tr></thead><tbody>`;
+        tasks.forEach(t => {
+            html += `<tr><td>${t.taskOrder}</td><td>${t.knowledge}</td>
+                <td>${createLink(t.action1_text, t.action1_url, t.name)}</td>
+                <td>${createLink(t.action2_text, t.action2_url, t.name)}</td>
+                <td>${createLink(t.action3_text, t.action3_url, t.name)}</td>
+                <td>${t.taskRecord || '-'}</td></tr>`;
+        });
+        document.getElementById('resultsTableContainer').innerHTML = tasks.length ? html + "</tbody></table>" : "無資料";
+        document.getElementById('resultsTitle').innerText = `${targetName} 的任務清單`;
+        document.getElementById('queryPage').style.display='none';
+        document.getElementById('resultsPage').style.display='block';
+    }
+
+    function showQueryPage() { document.getElementById('resultsPage').style.display='none'; document.getElementById('queryPage').style.display='block'; }
+    function handleLogout() { clearInterval(refreshTimer); location.reload(); }
+</script>
+</body>
+</html>
